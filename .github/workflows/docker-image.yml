@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build the Docker image
-        run: docker build . --file Dockerfile --tag glueforward:latest
-      - name: Publish the built image
-        run: docker push ghcr.io/geoffreycoulaud/glueforward:latest
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: geoffreycoulaud/glueforward:latest
