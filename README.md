@@ -58,5 +58,6 @@ A daemon to update the listening port of qbittorrent from gluetun's control serv
 
 ## TODOs
 
-- Setup github actions to build and deploy on push
+- ~~Setup github actions to build and deploy on push~~
+- Setup github actions to use tag, else latest
 - Add install instructions (compose)
