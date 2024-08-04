@@ -1,10 +1,6 @@
 # glueforward
 A daemon to update the listening port of qbittorrent from gluetun's control server
 
-## Install
-
-TODO install instructions (use docker, from github's container registry)
-
 ## Environment variables
 
 <table>
@@ -59,3 +55,8 @@ TODO install instructions (use docker, from github's container registry)
 ## Other info
 
 - If the forwarded port hasn't changed, no update is sent to qbittorrent
+
+## TODOs
+
+- Setup github actions to build and deploy on push
+- Add install instructions (compose)
