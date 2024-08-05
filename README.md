@@ -49,6 +49,20 @@ A daemon to update the listening port of qbittorrent from gluetun's control serv
 		<td>Yes</td>
 		<td>10</td>
 	</tr>
+	<tr>
+		<td>LOG_LEVEL</td>
+		<td>
+			Minimum level of severity for a message to be logged.<br/>
+			Available values are 
+			<code>CRITICAL</code>,
+			<code>ERROR</code>,
+			<code>WARNING</code>,
+			<code>INFO</code>,
+			<code>DEBUG</code>
+		</td>
+		<td>Yes</td>
+		<td>DEBUG</td>
+	</tr>
 </tbody>
 </table>
 

@@ -1,3 +1,4 @@
+import logging
 from enum import IntEnum
 from os import getenv
 from time import sleep
@@ -11,56 +12,82 @@ from qbittorrent import (
 
 
 class ReturnCodes(IntEnum):
-    MISSING_ENV_VARS = 1
-    QBITTORRENT_AUTH_ERROR = 2
+    MISSING_ENVIRONMENT_VARIABLE = 1
+    QBITTORRENT_AUTHENTICATION_ERROR = 2
 
 
-def getenv_mandatory(name: str) -> str:
-    """Get an environment variable or exit if it is not set"""
-    if (value := getenv(name)) is None:
-        print(f"{name} environment variable is required")
-        exit(ReturnCodes.MISSING_ENV_VARS)
-    return value
+class Application:
 
+    __gluetun: GluetunClient
+    __qbittorrent: QBittorrentClient
+    __success_interval: int
+    __retry_interval: int
+    __last_forwarded_port: int | None
 
-def main():
+    def __mgetenv(self, name: str) -> str:
+        """Get an environment variable or exit if it is not set"""
+        if (value := getenv(name)) is None:
+            logging.critical("Environment variable %s is required", name)
+            exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
+        return value
 
-    gluetun_client = GluetunClient(url=getenv_mandatory("GLUETUN_URL"))
-    qbittorrent_client = QBittorrentClient(url=getenv_mandatory("QBITTORRENT_URL"))
-    try:
-        qbittorrent_client.authenticate(
-            username=getenv_mandatory("QBITTORRENT_USERNAME"),
-            password=getenv_mandatory("QBITTORRENT_PASSWORD"),
+    def _setup(self) -> None:
+        """Setup the application"""
+
+        # Configure logging
+        log_level = (
+            environment_log_level
+            if (environment_log_level := getenv("LOG_LEVEL"))
+            in logging.getLevelNamesMapping().keys()
+            else "DEBUG"
         )
-    except QbittorrentAuthFailed as e:
-        print(f"Failed to authenticate to qbittorrent: {e}")
-        exit(ReturnCodes.QBITTORRENT_AUTH_ERROR)
+        logging.basicConfig(
+            level=log_level,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+        )
 
-    # Periodically check the port number from gluetun
-    # If an error occurs, retry after a shorter interval
-    # All intervals are in seconds
-    success_interval = getenv("SUCCESS_INTERVAL", 60 * 5)
-    retry_interval = getenv("RETRY_INTERVAL", 10)
-    while True:
-        sleep_amount = success_interval
-        last_known_port = None
+        # Initialize the state
+        self.__last_forwarded_port = None
+        self.__retry_interval = getenv("RETRY_INTERVAL", 10)
+        self.__success_interval = getenv("SUCCESS_INTERVAL", 60 * 5)
+        self.__gluetun = GluetunClient(url=self.__mgetenv("GLUETUN_URL"))
+        self.__qbittorrent = QBittorrentClient(url=self.__mgetenv("QBITTORRENT_URL"))
+
+    def _loop(self) -> None:
+        """Function called in a loop to check for changes in the forwarded port"""
+        forwarded_port = self.__gluetun.get_forwarded_port()
+        if forwarded_port == self.__last_forwarded_port:
+            logging.info("Forwarded port hasn't changed")
+            return
+        self.__last_forwarded_port = forwarded_port
+        self.__qbittorrent.set_port(forwarded_port)
+        logging.info("Listening port set to %d", forwarded_port)
+
+    def run(self) -> None:
+        """App entry point, in charge of setting up the app and starting the loop"""
+        self._setup()
+        logging.debug("Starting the application")
         try:
-            port = gluetun_client.get_forwarded_port()
-            if port == last_known_port:
-                continue
-            last_known_port = port
-            qbittorrent_client.set_port(port)
-        except Exception as e:
-            sleep_amount = retry_interval
-            match e:
-                case GluetunGetFwPortFailed():
-                    print(f"Failed to get forwarded port from gluetun: {e}")
-                case QbittorrentSetPortFailed():
-                    print(f"Failed to set port in qbittorrent: {e}")
-                case _:
-                    raise e
-        sleep(sleep_amount)
+            self.__qbittorrent.authenticate(
+                username=self.__mgetenv("QBITTORRENT_USERNAME"),
+                password=self.__mgetenv("QBITTORRENT_PASSWORD"),
+            )
+        except QbittorrentAuthFailed as exception:
+            logging.critical(exc_info=exception)
+            exit(ReturnCodes.QBITTORRENT_AUTHENTICATION_ERROR)
+        logging.debug("Authenticated to qBittorrent")
+        while True:
+            try:
+                self._loop()
+            except (
+                GluetunGetFwPortFailed,
+                QbittorrentSetPortFailed,
+            ) as exception:
+                logging.error(exc_info=exception)
+                sleep(self.__retry_interval)
+            else:
+                sleep(self.__success_interval)
 
 
 if __name__ == "__main__":
-    main()
+    Application().run()
