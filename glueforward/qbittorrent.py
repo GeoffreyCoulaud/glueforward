@@ -1,21 +1,21 @@
 import httpx
 
 
-class QbittorrentAuthFailed(Exception):
+class QBittorrentAuthFailed(Exception):
     """Exception raised when qbittorrent authentication fails"""
 
     def __init__(self, *args: object) -> None:
         super().__init__("Failed to authenticate to qBittorrent", *args)
 
 
-class QbittorrentSetPortFailed(Exception):
+class QBittorrentSetPortFailed(Exception):
     """Exception raised when qbittorrent port setting fails"""
 
     def __init__(self, *args: object) -> None:
         super().__init__("Failed to set qBittorrent listening port", *args)
 
 
-class QbittorrentClient:
+class QBittorrentClient:
 
     __client: httpx.Client
 
@@ -29,7 +29,7 @@ class QbittorrentClient:
             data={"username": username, "password": password},
         )
         if res.status_code != httpx.codes.OK:
-            raise QbittorrentAuthFailed(f"${res.status_code} {res.text}")
+            raise QBittorrentAuthFailed(f"${res.status_code} {res.text}")
         self.__client.cookies = res.cookies
 
     def set_port(self, port: int) -> None:
@@ -42,5 +42,5 @@ class QbittorrentClient:
             },
         )
         if res.status_code != httpx.codes.OK:
-            raise QbittorrentSetPortFailed(f"${res.status_code} {res.text}")
+            raise QBittorrentSetPortFailed(f"${res.status_code} {res.text}")
         return

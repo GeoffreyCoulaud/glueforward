@@ -5,9 +5,9 @@ from time import sleep
 
 from gluetun import GluetunClient, GluetunGetFwPortFailed
 from qbittorrent import (
-    QbittorrentAuthFailed,
+    QBittorrentAuthFailed,
     QBittorrentClient,
-    QbittorrentSetPortFailed,
+    QBittorrentSetPortFailed,
 )
 
 
@@ -48,10 +48,21 @@ class Application:
 
         # Initialize the state
         self.__last_forwarded_port = None
-        self.__retry_interval = getenv("RETRY_INTERVAL", 10)
-        self.__success_interval = getenv("SUCCESS_INTERVAL", 60 * 5)
+        self.__retry_interval = int(getenv("RETRY_INTERVAL", 10))
+        self.__success_interval = int(getenv("SUCCESS_INTERVAL", 60 * 5))
         self.__gluetun = GluetunClient(url=self.__mgetenv("GLUETUN_URL"))
         self.__qbittorrent = QBittorrentClient(url=self.__mgetenv("QBITTORRENT_URL"))
+
+        # Authenticate to qBittorrent
+        try:
+            self.__qbittorrent.authenticate(
+                username=self.__mgetenv("QBITTORRENT_USERNAME"),
+                password=self.__mgetenv("QBITTORRENT_PASSWORD"),
+            )
+        except QBittorrentAuthFailed as exception:
+            logging.critical("Critical error during setup", exc_info=exception)
+            exit(ReturnCodes.QBITTORRENT_AUTHENTICATION_ERROR)
+        logging.debug("Authenticated to qBittorrent")
 
     def _loop(self) -> None:
         """Function called in a loop to check for changes in the forwarded port"""
@@ -66,24 +77,14 @@ class Application:
     def run(self) -> None:
         """App entry point, in charge of setting up the app and starting the loop"""
         self._setup()
-        logging.debug("Starting the application")
-        try:
-            self.__qbittorrent.authenticate(
-                username=self.__mgetenv("QBITTORRENT_USERNAME"),
-                password=self.__mgetenv("QBITTORRENT_PASSWORD"),
-            )
-        except QbittorrentAuthFailed as exception:
-            logging.critical(exc_info=exception)
-            exit(ReturnCodes.QBITTORRENT_AUTHENTICATION_ERROR)
-        logging.debug("Authenticated to qBittorrent")
         while True:
             try:
                 self._loop()
             except (
                 GluetunGetFwPortFailed,
-                QbittorrentSetPortFailed,
+                QBittorrentSetPortFailed,
             ) as exception:
-                logging.error(exc_info=exception)
+                logging.error("", exc_info=exception)
                 sleep(self.__retry_interval)
             else:
                 sleep(self.__success_interval)
