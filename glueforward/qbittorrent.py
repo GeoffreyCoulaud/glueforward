@@ -43,4 +43,3 @@ class QBittorrentClient:
         )
         if res.status_code != httpx.codes.OK:
             raise QBittorrentSetPortFailed(f"${res.status_code} {res.text}")
-        return

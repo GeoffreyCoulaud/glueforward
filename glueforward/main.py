@@ -1,4 +1,5 @@
 import logging
+import sys
 from enum import IntEnum
 from os import getenv
 from time import sleep
@@ -28,7 +29,7 @@ class Application:
         """Get an environment variable or exit if it is not set"""
         if (value := getenv(name)) is None:
             logging.critical("Environment variable %s is required", name)
-            exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
+            sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
         return value
 
     def _setup(self) -> None:
@@ -38,7 +39,7 @@ class Application:
         log_level = (
             environment_log_level
             if (environment_log_level := getenv("LOG_LEVEL"))
-            in logging.getLevelNamesMapping().keys()
+            in logging.getLevelNamesMapping()
             else "DEBUG"
         )
         logging.basicConfig(
@@ -48,8 +49,8 @@ class Application:
 
         # Initialize the state
         self.__last_forwarded_port = None
-        self.__retry_interval = int(getenv("RETRY_INTERVAL", 10))
-        self.__success_interval = int(getenv("SUCCESS_INTERVAL", 60 * 5))
+        self.__retry_interval = int(getenv("RETRY_INTERVAL", str(10)))
+        self.__success_interval = int(getenv("SUCCESS_INTERVAL", str(60 * 5)))
         self.__gluetun = GluetunClient(url=self.__mgetenv("GLUETUN_URL"))
         self.__qbittorrent = QBittorrentClient(url=self.__mgetenv("QBITTORRENT_URL"))
 
@@ -61,7 +62,7 @@ class Application:
             )
         except QBittorrentAuthFailed as exception:
             logging.critical("Critical error during setup", exc_info=exception)
-            exit(ReturnCodes.QBITTORRENT_AUTHENTICATION_ERROR)
+            sys.exit(ReturnCodes.QBITTORRENT_AUTHENTICATION_ERROR)
         logging.debug("Authenticated to qBittorrent")
 
     def _loop(self) -> None:
