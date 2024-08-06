@@ -15,7 +15,7 @@ class QBittorrentSetPortFailed(Exception):
         super().__init__("Failed to set qBittorrent listening port", *args)
 
 
-class QBittorrentUnreachable(httpx.ConnectError):
+class QBittorrentUnreachable(Exception):
     """Exception raised when qbittorrent is unreachable"""
 
     def __init__(self, *args: object) -> None:

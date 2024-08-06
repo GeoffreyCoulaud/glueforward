@@ -3,7 +3,7 @@ from typing import TypedDict
 import httpx
 
 
-class GluetunUnreachable(httpx.ConnectError):
+class GluetunUnreachable(Exception):
     """Exception raised when gluetun is unreachable"""
 
     def __init__(self, *args: object) -> None:
