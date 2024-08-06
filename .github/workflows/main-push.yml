@@ -16,13 +16,14 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Lint the Python code using pylint
   lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install pylint
-        run: apt install pylint
+        run: pip install pylint
       - name: Run pylint
         run: pylint glueforward
 
