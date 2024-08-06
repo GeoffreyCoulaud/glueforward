@@ -1,4 +1,5 @@
 import logging
+import logging.config as logging_config
 import sys
 from enum import IntEnum
 from os import getenv
@@ -42,9 +43,27 @@ class Application:
             in logging.getLevelNamesMapping()
             else "INFO"
         )
+        logging_config.dictConfig(
+            {
+                "version": 1,
+                "formatters": {
+                    "default": {
+                        "format": "%(asctime)s [%(name)s] [%(levelname)s] %(message)s",
+                    },
+                },
+                "loggers": {
+                    "httpx": {
+                        # Silence httpx logs, unless the log level is DEBUG
+                        "level": "DEBUG" if log_level == "DEBUG" else "WARNING",
+                    },
+                },
+                "root": {
+                    "level": log_level,
+                },
+            }
+        )
         logging.basicConfig(
-            level=log_level,
-            format="%(asctime)s [%(levelname)s] %(message)s",
+            level=log_level, format="%(asctime)s [%(levelname)s] %(message)s"
         )
 
         # Initialize the state
@@ -85,7 +104,7 @@ class Application:
                 GluetunGetFwPortFailed,
                 QBittorrentSetPortFailed,
             ) as exception:
-                logging.error("", exc_info=exception)
+                logging.error("Non critical error in lifecycle", exc_info=exception)
                 sleep(self.__retry_interval)
             else:
                 sleep(self.__success_interval)
