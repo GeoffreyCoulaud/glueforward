@@ -3,6 +3,13 @@ from typing import TypedDict
 import httpx
 
 
+class GluetunUnreachable(httpx.ConnectError):
+    """Exception raised when gluetun is unreachable"""
+
+    def __init__(self, *args: object) -> None:
+        super().__init__("Failed to reach gluetun", *args)
+
+
 class GluetunGetFwPortFailed(Exception):
     """Exception raised when getting port forwarded fails"""
 
@@ -22,8 +29,15 @@ class GluetunClient:
         self.__client = httpx.Client(base_url=url)
 
     def get_forwarded_port(self) -> int:
-        res = self.__client.get(url="/v1/openvpn/portforwarded")
-        if res.status_code != httpx.codes.OK:
-            raise GluetunGetFwPortFailed(f"{res.status_code} {res.text}")
-        data: _PortForwardedResponseModel = res.json()
+        try:
+            response = self.__client.get(url="/v1/openvpn/portforwarded")
+            response.raise_for_status()
+        except httpx.ConnectError as exception:
+            raise GluetunUnreachable(self.__client.base_url) from exception
+        except httpx.HTTPStatusError as exception:
+            raise GluetunGetFwPortFailed(
+                exception.response.status_code,
+                exception.response.text,
+            ) from exception
+        data: _PortForwardedResponseModel = response.json()
         return data["port"]

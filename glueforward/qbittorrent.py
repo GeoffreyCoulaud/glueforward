@@ -15,31 +15,59 @@ class QBittorrentSetPortFailed(Exception):
         super().__init__("Failed to set qBittorrent listening port", *args)
 
 
+class QBittorrentUnreachable(httpx.ConnectError):
+    """Exception raised when qbittorrent is unreachable"""
+
+    def __init__(self, *args: object) -> None:
+        super().__init__("Failed to reach qBittorrent", *args)
+
+
 class QBittorrentClient:
 
     __client: httpx.Client
+    __credentials: dict[str, str]
 
-    def __init__(self, url: str):
+    def __init__(self, url: str, credentials: dict[str, str]):
+        self.__credentials = credentials
         self.__client = httpx.Client(base_url=url)
 
-    def authenticate(self, username: str, password: str) -> None:
-        res = self.__client.post(
-            url="/api/v2/auth/login",
-            cookies=None,
-            data={"username": username, "password": password},
-        )
-        if res.status_code != httpx.codes.OK:
-            raise QBittorrentAuthFailed(f"${res.status_code} {res.text}")
-        self.__client.cookies = res.cookies
+    def get_is_authenticated(self) -> bool:
+        return self.__client.cookies is not None
+
+    def __authenticate(self) -> None:
+        if self.get_is_authenticated():
+            return
+        try:
+            response = self.__client.post(
+                url="/api/v2/auth/login",
+                data=self.__credentials,
+                cookies=None,
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exception:
+            raise QBittorrentAuthFailed(
+                exception.response.status_code,
+                exception.response.text,
+            ) from exception
+        self.__client.cookies = response.cookies
 
     def set_port(self, port: int) -> None:
-        res = self.__client.post(
-            "/api/v2/app/setPreferences",
-            data={
-                "listen_port": port,
-                "random_port": False,
-                "upnp": False,
-            },
-        )
-        if res.status_code != httpx.codes.OK:
-            raise QBittorrentSetPortFailed(f"${res.status_code} {res.text}")
+        if not self.get_is_authenticated():
+            self.__authenticate()
+        try:
+            response = self.__client.post(
+                "/api/v2/app/setPreferences",
+                data={
+                    "listen_port": port,
+                    "random_port": False,
+                    "upnp": False,
+                },
+            )
+            response.raise_for_status()
+        except httpx.ConnectError as exception:
+            raise QBittorrentUnreachable(self.__client.base_url) from exception
+        except httpx.HTTPStatusError as exception:
+            raise QBittorrentSetPortFailed(
+                exception.response.status_code,
+                exception.response.text,
+            ) from exception
