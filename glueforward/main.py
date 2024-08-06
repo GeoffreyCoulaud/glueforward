@@ -87,8 +87,6 @@ class Application:
             logging.info("Forwarded port hasn't changed")
             return
         self.__last_forwarded_port = forwarded_port
-        if not self.__qbittorrent.get_is_authenticated():
-            self.__qbittorrent.__authenticate()
         self.__qbittorrent.set_port(forwarded_port)
         logging.info("Listening port set to %d", forwarded_port)
 
