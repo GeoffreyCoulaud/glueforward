@@ -61,7 +61,7 @@ A daemon to update the listening port of qbittorrent from gluetun's control serv
 			<code>DEBUG</code>
 		</td>
 		<td>Yes</td>
-		<td>DEBUG</td>
+		<td>INFO</td>
 	</tr>
 </tbody>
 </table>

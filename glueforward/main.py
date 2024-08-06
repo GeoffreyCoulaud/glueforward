@@ -40,7 +40,7 @@ class Application:
             environment_log_level
             if (environment_log_level := getenv("LOG_LEVEL"))
             in logging.getLevelNamesMapping()
-            else "DEBUG"
+            else "INFO"
         )
         logging.basicConfig(
             level=log_level,
