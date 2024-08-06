@@ -71,10 +71,6 @@ class Application:
         self.__last_forwarded_port = None
         self.__retry_interval = int(getenv("RETRY_INTERVAL", str(10)))
         self.__success_interval = int(getenv("SUCCESS_INTERVAL", str(60 * 5)))
-
-        # ! DEBUG
-        logging.critical("Gluetun URL: %s", self.__mgetenv("GLUETUN_URL"))
-
         self.__gluetun = GluetunClient(url=self.__mgetenv("GLUETUN_URL"))
         self.__qbittorrent = QBittorrentClient(
             url=self.__mgetenv("QBITTORRENT_URL"),
