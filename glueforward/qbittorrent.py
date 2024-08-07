@@ -35,7 +35,7 @@ class QBittorrentClient:
         logging.debug("qBittorrent client created with base url %s", url)
 
     def get_is_authenticated(self) -> bool:
-        return self.__client.cookies is not None
+        return len(self.__client.cookies) > 0
 
     def __authenticate(self) -> None:
         if self.get_is_authenticated():
@@ -53,7 +53,7 @@ class QBittorrentClient:
                 exception.response.text,
             ) from exception
         logging.debug("qBittorrent client authenticated")
-        self.__client.cookies = response.cookies
+        self.__client.cookies.update(response.cookies)
 
     def set_port(self, port: int) -> None:
         if not self.get_is_authenticated():
@@ -71,7 +71,13 @@ class QBittorrentClient:
         except httpx.ConnectError as exception:
             raise QBittorrentUnreachable(self.__client.base_url) from exception
         except httpx.HTTPStatusError as exception:
-            raise QBittorrentSetPortFailed(
-                exception.response.status_code,
-                exception.response.text,
-            ) from exception
+            if exception.response.status_code == 403:
+                raise QBittorrentAuthFailed(
+                    exception.response.status_code,
+                    exception.response.text,
+                ) from exception
+            else:
+                raise QBittorrentSetPortFailed(
+                    exception.response.status_code,
+                    exception.response.text,
+                ) from exception
