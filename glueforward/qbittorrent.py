@@ -1,3 +1,5 @@
+import logging
+
 import httpx
 
 
@@ -30,6 +32,7 @@ class QBittorrentClient:
     def __init__(self, url: str, credentials: dict[str, str]):
         self.__credentials = credentials
         self.__client = httpx.Client(base_url=url)
+        logging.debug("qBittorrent client created with base url %s", url)
 
     def get_is_authenticated(self) -> bool:
         return self.__client.cookies is not None
@@ -49,6 +52,7 @@ class QBittorrentClient:
                 exception.response.status_code,
                 exception.response.text,
             ) from exception
+        logging.debug("qBittorrent client authenticated")
         self.__client.cookies = response.cookies
 
     def set_port(self, port: int) -> None:

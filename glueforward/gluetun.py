@@ -1,3 +1,4 @@
+import logging
 from typing import TypedDict
 
 import httpx
@@ -27,6 +28,7 @@ class GluetunClient:
 
     def __init__(self, url: str):
         self.__client = httpx.Client(base_url=url)
+        logging.debug("Gluetun client created with base url %s", url)
 
     def get_forwarded_port(self) -> int:
         try:
