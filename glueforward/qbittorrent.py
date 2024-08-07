@@ -76,8 +76,7 @@ class QBittorrentClient:
                     exception.response.status_code,
                     exception.response.text,
                 ) from exception
-            else:
-                raise QBittorrentSetPortFailed(
-                    exception.response.status_code,
-                    exception.response.text,
-                ) from exception
+            raise QBittorrentSetPortFailed(
+                exception.response.status_code,
+                exception.response.text,
+            ) from exception
