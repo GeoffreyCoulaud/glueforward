@@ -1,3 +1,4 @@
+import json
 import logging
 
 import httpx
@@ -59,13 +60,16 @@ class QBittorrentClient:
         if not self.get_is_authenticated():
             self.__authenticate()
         try:
-            response = self.__client.post(
-                "/api/v2/app/setPreferences",
-                data={
+            data = json.dumps(
+                {
                     "listen_port": port,
                     "random_port": False,
                     "upnp": False,
-                },
+                }
+            )
+            response = self.__client.post(
+                "/api/v2/app/setPreferences",
+                data={"json": data},
             )
             response.raise_for_status()
         except httpx.ConnectError as exception:
