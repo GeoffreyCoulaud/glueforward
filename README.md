@@ -1,5 +1,29 @@
 # glueforward
-A daemon to update the listening port of qbittorrent from gluetun's control server
+
+Updates qbittorrent's listening port to be gluetun's forwarded port on the VPN side.
+
+The goal is to no longer query a file for the exposed port status, but instead use gleutun's API. This is in preparation for the [deprecation of the file approach in a future version of gluetun](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md#native-integrations).
+
+## Usage
+
+```yml
+services:
+	glueforward:
+		image: ghcr.io/geoffreycoulaud/glueforward:latest
+		container_name: glueforward
+		environment:
+			GLUETUN_URL: "..."
+			QBITTORRENT_URL: "..."
+			QBITTORRENT_USERNAME: "..."
+			QBITTORRENT_PASSWORD: "qbittorrent_webui_password"
+		depends_on:
+			- gluetun
+			- qbittorrent
+	gluetun:
+		# Insert gluetun service definition here
+	qbittorrent:
+		# Insert qbittorrent service definition here
+```
 
 ## Environment variables
 
@@ -69,9 +93,6 @@ A daemon to update the listening port of qbittorrent from gluetun's control serv
 ## Other info
 
 - If the forwarded port hasn't changed, no update is sent to qbittorrent
-
-## TODOs
-
-- ~~Setup github actions to build and deploy on push~~
-- Setup github actions to use tag, else latest
-- Add install instructions (compose)
+- Ensure that gluetun and qbittorrent are reachable from glueforward.  
+For example: If you separate services in different networks, make sure glueforward has access to the appropriate ones.
+- [Gluetun wiki - VPN server port forwarding](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md)
