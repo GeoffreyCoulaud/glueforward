@@ -2,7 +2,7 @@
 
 Updates qbittorrent's listening port to be gluetun's forwarded port on the VPN side.
 
-The goal is to no longer query a file for the exposed port status, but instead use gleutun's API. This is in preparation for the [deprecation of the file approach in a future version of gluetun](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md#native-integrations).
+The goal is to no longer query a file for the exposed port status, but instead use gluetun's API. This is in preparation for the [deprecation of the file approach in a future version of gluetun](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md#native-integrations).
 
 ## Usage
 
