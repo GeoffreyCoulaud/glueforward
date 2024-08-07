@@ -6,6 +6,8 @@ The goal is to no longer query a file for the exposed port status, but instead u
 
 ## Usage
 
+The recommended way to use glueforward is with docker compose.
+
 ```yml
 services:
   glueforward:
@@ -15,7 +17,7 @@ services:
       GLUETUN_URL: "..."
       QBITTORRENT_URL: "..."
       QBITTORRENT_USERNAME: "..."
-      QBITTORRENT_PASSWORD: "qbittorrent_webui_password"
+      QBITTORRENT_PASSWORD: "..."
     depends_on:
       - gluetun
       - qbittorrent
