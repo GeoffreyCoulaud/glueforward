@@ -25,7 +25,7 @@ class Application:
     __qbittorrent: QBittorrentClient
     __success_interval: int
     __retry_interval: int
-    __last_forwarded_port: int | None
+    __last_set_port: int | None
 
     def __mgetenv(self, name: str) -> str:
         """Get an environment variable or exit if it is not set"""
@@ -68,7 +68,7 @@ class Application:
         )
 
         # Initialize the state
-        self.__last_forwarded_port = None
+        self.__last_set_port = None
         self.__retry_interval = int(getenv("RETRY_INTERVAL", str(10)))
         self.__success_interval = int(getenv("SUCCESS_INTERVAL", str(60 * 5)))
         self.__gluetun = GluetunClient(url=self.__mgetenv("GLUETUN_URL"))
@@ -83,11 +83,13 @@ class Application:
     def _loop(self) -> None:
         """Function called in a loop to check for changes in the forwarded port"""
         forwarded_port = self.__gluetun.get_forwarded_port()
-        if forwarded_port == self.__last_forwarded_port:
+        if forwarded_port == self.__last_set_port:
             logging.info("Forwarded port hasn't changed")
             return
-        self.__last_forwarded_port = forwarded_port
+        # If setting the port fails, we want to retry even it didn't change on gluetun
+        self.__last_set_port = None
         self.__qbittorrent.set_port(forwarded_port)
+        self.__last_set_port = forwarded_port
         logging.info("Listening port set to %d", forwarded_port)
 
     def run(self) -> None:
