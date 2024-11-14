@@ -5,7 +5,7 @@ from enum import IntEnum
 from os import getenv
 from time import sleep
 
-from gluetun import GluetunClient, GluetunGetForwardedwPortFailed, GluetunUnreachable
+from gluetun import GluetunClient, GluetunGetForwardedPortFailed, GluetunUnreachable
 from qbittorrent import (
     QBittorrentAuthFailed,
     QBittorrentClient,
@@ -107,7 +107,7 @@ class Application:
             except (
                 GluetunUnreachable,
                 QBittorrentUnreachable,
-                GluetunGetForwardedwPortFailed,
+                GluetunGetForwardedPortFailed,
                 QBittorrentSetPortFailed,
             ) as exception:
                 logging.error("Retryable error in lifecycle", exc_info=exception)

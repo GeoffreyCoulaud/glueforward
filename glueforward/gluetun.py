@@ -11,7 +11,7 @@ class GluetunUnreachable(Exception):
         super().__init__("Failed to reach gluetun", *args)
 
 
-class GluetunGetForwardedwPortFailed(Exception):
+class GluetunGetForwardedPortFailed(Exception):
     """Exception raised when getting port forwarded fails"""
 
     def __init__(self, *args: object) -> None:
@@ -37,7 +37,7 @@ class GluetunClient:
         except httpx.ConnectError as exception:
             raise GluetunUnreachable(self.__client.base_url) from exception
         except httpx.HTTPStatusError as exception:
-            raise GluetunGetForwardedwPortFailed(
+            raise GluetunGetForwardedPortFailed(
                 exception.response.status_code,
                 exception.response.text,
             ) from exception
