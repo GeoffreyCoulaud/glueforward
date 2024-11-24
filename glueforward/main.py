@@ -5,7 +5,7 @@ from enum import IntEnum
 from os import getenv
 from time import sleep
 
-from glueforward.errors import RetryableGlueforwardError
+from errors import RetryableGlueforwardError
 from gluetun import GluetunClient
 from qbittorrent import QBittorrentAuthFailed, QBittorrentClient
 

@@ -10,14 +10,14 @@ class GluetunUnreachable(RetryableGlueforwardError):
     """Exception raised when gluetun is unreachable"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__(message="Failed to reach gluetun", *args)
+        super().__init__(*args, message="Failed to reach gluetun")
 
 
 class GluetunGetForwardedPortFailed(RetryableGlueforwardError):
     """Exception raised when getting port forwarded fails"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__(message="Failed to get gluetun forwarded port", *args)
+        super().__init__(*args, message="Failed to get gluetun forwarded port")
 
 
 class _PortForwardedResponseModel(TypedDict):

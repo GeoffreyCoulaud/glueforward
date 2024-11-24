@@ -12,9 +12,9 @@ class RetryableGlueforwardError(GlueforwardError):
 
     def __init__(
         self,
+        *args: object,
         message: str,
         retry_immediately: bool = False,
-        *args: object,
     ) -> None:
         super().__init__(message, *args)
         self.__retry_immediately = retry_immediately

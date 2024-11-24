@@ -10,21 +10,21 @@ class QBittorrentAuthFailed(GlueforwardError):
     """Exception raised when qbittorrent authentication fails"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__(message="Failed to authenticate to qBittorrent", *args)
+        super().__init__(*args, message="Failed to authenticate to qBittorrent")
 
 
 class QBittorrentSetPortFailed(RetryableGlueforwardError):
     """Exception raised when qbittorrent port setting fails"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__(message="Failed to set qBittorrent listening port", *args)
+        super().__init__(*args, message="Failed to set qBittorrent listening port")
 
 
 class QBittorrentUnreachable(RetryableGlueforwardError):
     """Exception raised when qbittorrent is unreachable"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__(message="Failed to reach qBittorrent", *args)
+        super().__init__(*args, message="Failed to reach qBittorrent")
 
 
 class QBittorrentReauthNeeded(RetryableGlueforwardError):
@@ -32,9 +32,9 @@ class QBittorrentReauthNeeded(RetryableGlueforwardError):
 
     def __init__(self, *args: object) -> None:
         super().__init__(
+            *args,
             message="qBittorrent needs reauthentication",
             retry_immediately=True,  # Reauthenticating is immediate
-            *args,
         )
 
 
