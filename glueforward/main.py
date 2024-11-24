@@ -5,13 +5,9 @@ from enum import IntEnum
 from os import getenv
 from time import sleep
 
-from gluetun import GluetunClient, GluetunGetForwardedPortFailed, GluetunUnreachable
-from qbittorrent import (
-    QBittorrentAuthFailed,
-    QBittorrentClient,
-    QBittorrentSetPortFailed,
-    QBittorrentUnreachable,
-)
+from glueforward.errors import RetryableGlueforwardError
+from gluetun import GluetunClient
+from qbittorrent import QBittorrentAuthFailed, QBittorrentClient
 
 
 class ReturnCodes(IntEnum):
@@ -98,20 +94,19 @@ class Application:
         while True:
             try:
                 self._loop()
-            except QBittorrentAuthFailed as exception:
+            except QBittorrentAuthFailed as error:
                 logging.critical(
                     "Could not authenticate to qBittorrent",
-                    exc_info=exception,
+                    exc_info=error,
                 )
                 sys.exit(ReturnCodes.QBITTORRENT_AUTHENTICATION_ERROR)
-            except (
-                GluetunUnreachable,
-                QBittorrentUnreachable,
-                GluetunGetForwardedPortFailed,
-                QBittorrentSetPortFailed,
-            ) as exception:
-                logging.error("Retryable error in lifecycle", exc_info=exception)
-                sleep(self.__retry_interval)
+            except RetryableGlueforwardError as error:
+                logging.error("Retryable error in lifecycle", exc_info=error)
+                if error.get_retry_immediately():
+                    logging.info("Retrying immediately")
+                else:
+                    logging.info("Retrying in %d seconds", self.__retry_interval)
+                    sleep(self.__retry_interval)
             else:
                 sleep(self.__success_interval)
 

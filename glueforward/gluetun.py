@@ -3,19 +3,21 @@ from typing import TypedDict
 
 import httpx
 
+from errors import RetryableGlueforwardError
 
-class GluetunUnreachable(Exception):
+
+class GluetunUnreachable(RetryableGlueforwardError):
     """Exception raised when gluetun is unreachable"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__("Failed to reach gluetun", *args)
+        super().__init__(message="Failed to reach gluetun", *args)
 
 
-class GluetunGetForwardedPortFailed(Exception):
+class GluetunGetForwardedPortFailed(RetryableGlueforwardError):
     """Exception raised when getting port forwarded fails"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__("Failed to get gluetun forwarded port", *args)
+        super().__init__(message="Failed to get gluetun forwarded port", *args)
 
 
 class _PortForwardedResponseModel(TypedDict):

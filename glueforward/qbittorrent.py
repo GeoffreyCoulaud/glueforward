@@ -3,26 +3,39 @@ import logging
 
 import httpx
 
+from errors import GlueforwardError, RetryableGlueforwardError
 
-class QBittorrentAuthFailed(Exception):
+
+class QBittorrentAuthFailed(GlueforwardError):
     """Exception raised when qbittorrent authentication fails"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__("Failed to authenticate to qBittorrent", *args)
+        super().__init__(message="Failed to authenticate to qBittorrent", *args)
 
 
-class QBittorrentSetPortFailed(Exception):
+class QBittorrentSetPortFailed(RetryableGlueforwardError):
     """Exception raised when qbittorrent port setting fails"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__("Failed to set qBittorrent listening port", *args)
+        super().__init__(message="Failed to set qBittorrent listening port", *args)
 
 
-class QBittorrentUnreachable(Exception):
+class QBittorrentUnreachable(RetryableGlueforwardError):
     """Exception raised when qbittorrent is unreachable"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__("Failed to reach qBittorrent", *args)
+        super().__init__(message="Failed to reach qBittorrent", *args)
+
+
+class QBittorrentReauthNeeded(RetryableGlueforwardError):
+    """Exception raised when qbittorrent needs reauthentication"""
+
+    def __init__(self, *args: object) -> None:
+        super().__init__(
+            message="qBittorrent needs reauthentication",
+            retry_immediately=True,  # Reauthenticating is immediate
+            *args,
+        )
 
 
 class QBittorrentClient:
@@ -38,7 +51,7 @@ class QBittorrentClient:
     def get_is_authenticated(self) -> bool:
         return len(self.__client.cookies) > 0
 
-    def __post(self, url: str, data: dict[str, str]) -> httpx.Response:
+    def __request(self, method: str, url: str, data: dict[str, str]) -> httpx.Response:
         """
         Send a POST request to the qBittorrent API, handling some exceptions
 
@@ -48,7 +61,7 @@ class QBittorrentClient:
         - httpx.HTTPStatusError
         """
         try:
-            response = self.__client.post(url, data=data)
+            response = self.__client.request(method=method, url=url, data=data)
             response.raise_for_status()
             return response
         except httpx.ConnectError as exception:
@@ -56,7 +69,6 @@ class QBittorrentClient:
         except httpx.HTTPStatusError as exception:
             # Special case, auth error
             if exception.response.status_code == 403:
-                self.reset_authentication()
                 raise QBittorrentAuthFailed(
                     exception.response.status_code,
                     exception.response.text,
@@ -68,7 +80,8 @@ class QBittorrentClient:
         if self.get_is_authenticated():
             return
         logging.debug("Authenticating to qBittorrent")
-        response = self.__post(
+        response = self.__request(
+            method="post",
             url="/api/v2/auth/login",
             data=self.__credentials,
         )
@@ -88,10 +101,17 @@ class QBittorrentClient:
             "upnp": False,
         }
         try:
-            self.__post(
+            self.__request(
+                method="post",
                 url="/api/v2/app/setPreferences",
                 data={"json": json.dumps(data)},
             )
+        except QBittorrentAuthFailed as exception:
+            # If failed here, we were already authenticated before but session expired,
+            # so we need to reauthenticate and retry.
+            logging.warning("qBittorrent session expired, reauthenticating")
+            self.reset_authentication()
+            raise QBittorrentReauthNeeded() from exception
         except httpx.HTTPStatusError as exception:
             # Handle 5xx errors (= qbt has an issue)
             if exception.response.status_code // 100 == 5:
