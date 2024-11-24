@@ -1,7 +1,7 @@
 class GlueforwardError(Exception):
     """Base class for exceptions in this module."""
 
-    def __init__(self, message: str, *args: object) -> None:
+    def __init__(self, *args: object, message: str) -> None:
         super().__init__(message, *args)
 
 
@@ -16,7 +16,7 @@ class RetryableGlueforwardError(GlueforwardError):
         message: str,
         retry_immediately: bool = False,
     ) -> None:
-        super().__init__(message, *args)
+        super().__init__(*args, message=message)
         self.__retry_immediately = retry_immediately
 
     def get_retry_immediately(self) -> bool:
