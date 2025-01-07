@@ -10,7 +10,7 @@ class GluetunAuthFailed(GlueforwardError):
     """Exception raised when gluetun authentication fails"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__(*args, message="Failed to authenticate to Gluetun. See https://github.com/t-anc/GSP-Qbittorent-Gluetun-sync-port-mod#gluetun")
+        super().__init__(*args, message="Failed to authenticate to Gluetun. See https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md")
 
 
 class GluetunUnreachable(RetryableGlueforwardError):

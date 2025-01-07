@@ -48,7 +48,7 @@ services:
   </tr>
   <tr>
     <td>GLUETUN_API_KEY</td>
-    <td>Your gluetun control server <a href="https://github.com/t-anc/GSP-Qbittorent-Gluetun-sync-port-mod#gluetun">API key</a></td>
+    <td>Your gluetun control server <a href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md">API key</a></td>
     <td>Yes (only for gluetun up to v3.4.0)</td>
     <td></td>
   </tr>
