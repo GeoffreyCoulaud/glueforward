@@ -34,7 +34,7 @@ class _PortForwardedResponseModel(TypedDict):
 class GluetunClient:
 
     __client: httpx.Client
-    __credentials: dict[str, str]
+    __api_key: str
 
     def __init__(self, url: str, api_key: str = ''):
         self.__api_key = api_key
