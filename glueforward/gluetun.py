@@ -48,7 +48,7 @@ class GluetunClient:
 
         try:
             if self.get_has_credentials():
-                response = self.__client.request(method='GET', url="/v1/openvpn/portforwarded", headers=f"X-API-Key:{self.__api_key}")
+                response = self.__client.request(method='GET', url="/v1/openvpn/portforwarded", headers={"X-API-Key": self.__api_key})
             else:
                 response = self.__client.request(method='GET', url="/v1/openvpn/portforwarded")
             if response.status_code == 401:
