@@ -1,7 +1,6 @@
 import logging
 import logging.config as logging_config
 import sys
-from typing import Union
 from enum import IntEnum
 from os import getenv
 from time import sleep
@@ -30,7 +29,7 @@ class Application:
             sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
         return value
 
-    def __optional_getenv(self, name: str) -> Union[None, str]:
+    def __optional_getenv(self, name: str) -> None | str:
         """Get an environment variable or warn if it is not set"""
         if (value := getenv(name)) is None:
             logging.warning("Environment variable %s is not defined", name)
