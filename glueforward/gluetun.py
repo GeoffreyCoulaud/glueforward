@@ -1,5 +1,5 @@
 import logging
-from typing import TypedDict, Union
+from typing import TypedDict
 
 import httpx
 
@@ -36,28 +36,24 @@ class GluetunClient:
     __client: httpx.Client
     __api_key: str
 
-    def __init__(self, url: str, api_key: str = ''):
-        self.__api_key = api_key
+    def __init__(self, url: str, api_key: None | str):
         self.__client = httpx.Client(base_url=url)
+        if api_key:
+            self.__client.headers.update({"X-API-Key": api_key})
         logging.debug("Gluetun client created with base url %s", url)
 
     def get_has_credentials(self) -> bool:
         return len(self.__api_key) > 0
 
     def get_forwarded_port(self) -> int:
-
         try:
-            if self.get_has_credentials():
-                response = self.__client.request(method='GET', url="/v1/openvpn/portforwarded", headers={"X-API-Key": self.__api_key})
-            else:
-                response = self.__client.request(method='GET', url="/v1/openvpn/portforwarded")
-            if response.status_code == 401:
-                raise GluetunAuthFailed()
+            response = self.__client.get(url="/v1/openvpn/portforwarded")
             response.raise_for_status()
-
         except httpx.ConnectError as exception:
             raise GluetunUnreachable(self.__client.base_url) from exception
         except httpx.HTTPStatusError as exception:
+            if exception.response.status_code == 401:
+                raise GluetunAuthFailed(exception.response.text)
             raise GluetunGetForwardedPortFailed(
                 exception.response.status_code,
                 exception.response.text,
