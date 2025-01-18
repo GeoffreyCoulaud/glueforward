@@ -52,7 +52,7 @@ class GluetunClient:
         try:
             response = self.__client.get(url="/v1/openvpn/portforwarded")
             response.raise_for_status()
-        except httpx.ConnectError as exception:
+        except (httpx.ConnectError, httpx.ReadTimeout) as exception:
             raise GluetunUnreachable(self.__client.base_url) from exception
         except httpx.HTTPStatusError as exception:
             if exception.response.status_code == 401:

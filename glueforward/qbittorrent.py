@@ -64,7 +64,7 @@ class QBittorrentClient:
             response = self.__client.request(method=method, url=url, data=data)
             response.raise_for_status()
             return response
-        except httpx.ConnectError as exception:
+        except (httpx.ConnectError, httpx.ReadTimeout) as exception:
             raise QBittorrentUnreachable(self.__client.base_url) from exception
         except httpx.HTTPStatusError as exception:
             # Special case, auth error
