@@ -49,7 +49,7 @@ services:
   <tr>
     <td>GLUETUN_API_KEY</td>
     <td>Your gluetun control server <a href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md">API key</a></td>
-    <td>Yes (only for gluetun up to v3.4.0)</td>
+    <td>No¹</td>
     <td></td>
   </tr>
   <tr>
@@ -99,9 +99,10 @@ services:
 </tbody>
 </table>
 
+1. Optional before gluetun v3.40.0, where all control server routes become private by default
+
 ## Other info
 
-- If the forwarded port hasn't changed, no update is sent to qbittorrent
 - Ensure that gluetun and qbittorrent are reachable from glueforward.  
 For example: If you separate services in different networks, make sure glueforward has access to the appropriate ones.
 - [Gluetun wiki - VPN server port forwarding](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md)
