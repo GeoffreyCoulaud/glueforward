@@ -22,11 +22,17 @@ class Application:
     __success_interval: int
     __retry_interval: int
 
-    def __mgetenv(self, name: str) -> str:
+    def __required_getenv(self, name: str) -> str:
         """Get an environment variable or exit if it is not set"""
         if (value := getenv(name)) is None:
             logging.critical("Environment variable %s is required", name)
             sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
+        return value
+
+    def __optional_getenv(self, name: str) -> None | str:
+        """Get an environment variable or warn if it is not set"""
+        if (value := getenv(name)) is None:
+            logging.warning("Environment variable %s is not defined", name)
         return value
 
     def _setup(self) -> None:
@@ -65,12 +71,15 @@ class Application:
         # Initialize the state
         self.__retry_interval = int(getenv("RETRY_INTERVAL", str(10)))
         self.__success_interval = int(getenv("SUCCESS_INTERVAL", str(60 * 5)))
-        self.__gluetun = GluetunClient(url=self.__mgetenv("GLUETUN_URL"))
+        self.__gluetun = GluetunClient(
+            url=self.__required_getenv("GLUETUN_URL"),
+            api_key=self.__optional_getenv("GLUETUN_API_KEY")
+        )
         self.__qbittorrent = QBittorrentClient(
-            url=self.__mgetenv("QBITTORRENT_URL"),
+            url=self.__required_getenv("QBITTORRENT_URL"),
             credentials={
-                "username": self.__mgetenv("QBITTORRENT_USERNAME"),
-                "password": self.__mgetenv("QBITTORRENT_PASSWORD"),
+                "username": self.__required_getenv("QBITTORRENT_USERNAME"),
+                "password": self.__required_getenv("QBITTORRENT_PASSWORD"),
             },
         )
 

@@ -15,6 +15,7 @@ services:
     container_name: glueforward
     environment:
       GLUETUN_URL: "..."
+      GLUETUN_API_KEY: "..."
       QBITTORRENT_URL: "..."
       QBITTORRENT_USERNAME: "..."
       QBITTORRENT_PASSWORD: "..."
@@ -43,6 +44,12 @@ services:
     <td>GLUETUN_URL</td>
     <td>Url to the <a href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md#openvpn-and-wireguard">gluetun control server</a></td>
     <td>No</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>GLUETUN_API_KEY</td>
+    <td>Your gluetun control server <a href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md">API key</a></td>
+    <td>Yes (only for gluetun up to v3.4.0)</td>
     <td></td>
   </tr>
   <tr>
