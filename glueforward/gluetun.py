@@ -10,7 +10,10 @@ class GluetunAuthFailed(GlueforwardError):
     """Exception raised when gluetun authentication fails"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__(*args, message="Failed to authenticate to Gluetun. See https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md")
+        super().__init__(
+            *args,
+            message="Failed to authenticate to Gluetun. See https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md"  # pylint: disable=line-too-long
+        )
 
 
 class GluetunUnreachable(RetryableGlueforwardError):
@@ -53,7 +56,7 @@ class GluetunClient:
             raise GluetunUnreachable(self.__client.base_url) from exception
         except httpx.HTTPStatusError as exception:
             if exception.response.status_code == 401:
-                raise GluetunAuthFailed(exception.response.text)
+                raise GluetunAuthFailed(exception.response.text) from exception
             raise GluetunGetForwardedPortFailed(
                 exception.response.status_code,
                 exception.response.text,
