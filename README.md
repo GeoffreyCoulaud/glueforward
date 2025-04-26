@@ -1,6 +1,6 @@
 # glueforward
 
-Updates qbittorrent's listening port to be gluetun's forwarded port on the VPN side.
+Updates slskd's listening port to be gluetun's forwarded port on the VPN side by modifying slskd.yaml configuration file.
 
 The goal is to no longer query a file for the exposed port status, but instead use gluetun's API. This is in preparation for the [deprecation of the file approach in a future version of gluetun](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md#native-integrations).
 
@@ -16,16 +16,14 @@ services:
     environment:
       GLUETUN_URL: "..."
       GLUETUN_API_KEY: "..."
-      QBITTORRENT_URL: "..."
-      QBITTORRENT_USERNAME: "..."
-      QBITTORRENT_PASSWORD: "..."
+      SLSKD_CONFIG_PATH: "/path/to/slskd.yaml"
     depends_on:
       - gluetun
-      - qbittorrent
+      - slskd
   gluetun:
     # Insert gluetun service definition here
-  qbittorrent:
-    # Insert qbittorrent service definition here
+  slskd:
+    # Insert slskd service definition here
 ```
 
 ## Environment variables
@@ -53,20 +51,8 @@ services:
     <td></td>
   </tr>
   <tr>
-    <td>QBITTORRENT_URL</td>
-    <td>Url to the qbittorrent web UI</td>
-    <td>No</td>
-    <td></td>
-  </tr>
-  <tr>
-    <td>QBITTORRENT_USERNAME</td>
-    <td>Username to authenticate to qbittorrent</td>
-    <td>No</td>
-    <td></td>
-  </tr>
-  <tr>
-    <td>QBITTORRENT_PASSWORD</td>
-    <td>Password to authenticate to qbittorrent</td>
+    <td>SLSKD_CONFIG_PATH</td>
+    <td>Path to slskd.yaml configuration file</td>
     <td>No</td>
     <td></td>
   </tr>
@@ -103,6 +89,6 @@ services:
 
 ## Other info
 
-- Ensure that gluetun and qbittorrent are reachable from glueforward.  
+- Ensure that gluetun is reachable from glueforward and that the slskd.yaml file is accessible.  
 For example: If you separate services in different networks, make sure glueforward has access to the appropriate ones.
 - [Gluetun wiki - VPN server port forwarding](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md)

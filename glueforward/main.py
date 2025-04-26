@@ -7,18 +7,17 @@ from time import sleep
 
 from errors import RetryableGlueforwardError
 from gluetun import GluetunClient
-from qbittorrent import QBittorrentAuthFailed, QBittorrentClient
+from slskd import SlskdConfig
 
 
 class ReturnCodes(IntEnum):
     MISSING_ENVIRONMENT_VARIABLE = 1
-    QBITTORRENT_AUTHENTICATION_ERROR = 2
 
 
 class Application:
 
     __gluetun: GluetunClient
-    __qbittorrent: QBittorrentClient
+    __slskd: SlskdConfig
     __success_interval: int
     __retry_interval: int
 
@@ -75,19 +74,15 @@ class Application:
             url=self.__required_getenv("GLUETUN_URL"),
             api_key=self.__optional_getenv("GLUETUN_API_KEY")
         )
-        self.__qbittorrent = QBittorrentClient(
-            url=self.__required_getenv("QBITTORRENT_URL"),
-            credentials={
-                "username": self.__required_getenv("QBITTORRENT_USERNAME"),
-                "password": self.__required_getenv("QBITTORRENT_PASSWORD"),
-            },
+        self.__slskd = SlskdConfig(
+            config_path=self.__required_getenv("SLSKD_CONFIG_PATH")
         )
 
     def _loop(self) -> None:
         """Function called in a loop to check for changes in the forwarded port"""
         forwarded_port = self.__gluetun.get_forwarded_port()
-        self.__qbittorrent.set_port(forwarded_port)
-        logging.info("Listening port set to %d", forwarded_port)
+        self.__slskd.update_port(forwarded_port)
+        logging.info("Updated slskd listen_port to %d", forwarded_port)
 
     def run(self) -> None:
         """App entry point, in charge of setting up the app and starting the loop"""
@@ -95,12 +90,6 @@ class Application:
         while True:
             try:
                 self._loop()
-            except QBittorrentAuthFailed as error:
-                logging.critical(
-                    "Could not authenticate to qBittorrent",
-                    exc_info=error,
-                )
-                sys.exit(ReturnCodes.QBITTORRENT_AUTHENTICATION_ERROR)
             except RetryableGlueforwardError as error:
                 logging.error("Retryable error in lifecycle", exc_info=error)
                 if error.get_retry_immediately():
