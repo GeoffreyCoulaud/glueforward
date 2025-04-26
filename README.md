@@ -1,4 +1,4 @@
-# glueforward
+# glueslskd
 
 Updates slskd's listening port to be gluetun's forwarded port on the VPN side by modifying slskd.yaml configuration file.
 
@@ -6,13 +6,13 @@ The goal is to no longer query a file for the exposed port status, but instead u
 
 ## Usage
 
-The recommended way to use glueforward is with docker compose.
+The recommended way to use glueslskd is with docker compose.
 
 ```yml
 services:
-  glueforward:
-    image: ghcr.io/geoffreycoulaud/glueforward:latest
-    container_name: glueforward
+  glueslskd:
+    image: ghcr.io/geoffreycoulaud/glueslskd:latest
+    container_name: glueslskd
     environment:
       GLUETUN_URL: "..."
       GLUETUN_API_KEY: "..."
@@ -89,6 +89,6 @@ services:
 
 ## Other info
 
-- Ensure that gluetun is reachable from glueforward and that the slskd.yaml file is accessible.  
-For example: If you separate services in different networks, make sure glueforward has access to the appropriate ones.
+- Ensure that gluetun is reachable from glueslskd and that the slskd.yaml file is accessible.  
+For example: If you separate services in different networks, make sure glueslskd has access to the appropriate ones.
 - [Gluetun wiki - VPN server port forwarding](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md)
