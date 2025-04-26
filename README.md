@@ -16,10 +16,11 @@ services:
     environment:
       GLUETUN_URL: "..."
       GLUETUN_API_KEY: "..."
-      SLSKD_CONFIG_PATH: "/path/to/slskd.yaml"
+      SLSKD_CONFIG_PATH: "/config/slskd.yaml"
+    volumes:
+      - /path/to/your/slskd.yaml:/config/slskd.yaml
     depends_on:
       - gluetun
-      - slskd
   gluetun:
     # Insert gluetun service definition here
   slskd:
@@ -89,6 +90,9 @@ services:
 
 ## Other info
 
-- Ensure that gluetun is reachable from glueslskd and that the slskd.yaml file is accessible.  
-For example: If you separate services in different networks, make sure glueslskd has access to the appropriate ones.
+- Ensure that gluetun is reachable from glueslskd and that the slskd.yaml file is accessible via the mounted volume.  
+For example: 
+  - Mount the slskd.yaml file from your host to the container (as shown in the example)
+  - If you separate services in different networks, make sure glueslskd has access to the appropriate ones
+  - Ensure the container has proper permissions to read/write the config file
 - [Gluetun wiki - VPN server port forwarding](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md)
