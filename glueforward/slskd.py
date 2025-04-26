@@ -22,20 +22,23 @@ class SlskdConfig:
         logging.debug("Initialized SlskdConfig with path: %s", config_path)
 
     def update_port(self, port: int) -> None:
-        """Update the listen_port in slskd.yaml"""
+        """Update the listenPort in slskd.yaml"""
         try:
             # Read existing config
             with open(self.__config_path, 'r') as f:
                 config = yaml.safe_load(f) or {}
             
-            # Update port
-            config['listen_port'] = port
+            # Handle both root-level and soulseek.listenPort configurations
+            if 'soulseek' in config:
+                config['soulseek']['listenPort'] = port
+            else:
+                config = {'soulseek': {'listenPort': port}}
             
             # Write back to file
             with open(self.__config_path, 'w') as f:
                 yaml.dump(config, f)
                 
-            logging.debug("Updated slskd listen_port to %d", port)
+            logging.debug("Updated slskd listenPort to %d", port)
             
         except (yaml.YAMLError, OSError) as e:
             raise SlskdConfigError(f"Failed to update config: {str(e)}") from e
