@@ -1,9 +1,11 @@
 import json
 import logging
+from typing import Optional
 
 import httpx
 
 from errors import GlueforwardError, RetryableGlueforwardError
+from service_client import ServiceClient
 
 
 class QBittorrentAuthFailed(GlueforwardError):
@@ -38,7 +40,7 @@ class QBittorrentReauthNeeded(RetryableGlueforwardError):
         )
 
 
-class QBittorrentClient:
+class QBittorrentClient(ServiceClient):
 
     __client: httpx.Client
     __credentials: dict[str, str]
@@ -51,7 +53,7 @@ class QBittorrentClient:
     def get_is_authenticated(self) -> bool:
         return len(self.__client.cookies) > 0
 
-    def __request(self, method: str, url: str, data: dict[str, str]) -> httpx.Response:
+    def __request(self, method: str, url: str, data: dict[str, str]) -> Optional[httpx.Response]:
         """
         Send a POST request to the qBittorrent API, handling some exceptions
 
@@ -67,14 +69,12 @@ class QBittorrentClient:
         except (httpx.ConnectError, httpx.ReadTimeout) as exception:
             raise QBittorrentUnreachable(self.__client.base_url) from exception
         except httpx.HTTPStatusError as exception:
-            # Special case, auth error
-            if exception.response.status_code == 403:
-                raise QBittorrentAuthFailed(
-                    exception.response.status_code,
-                    exception.response.text,
-                ) from exception
-            # Otherwise, raise generic exception
-            raise exception
+            self._handle_request_exception(
+                exception,
+                QBittorrentAuthFailed,
+                QBittorrentSetPortFailed
+            )
+            return None
 
     def authenticate(self) -> None:
         if self.get_is_authenticated():
