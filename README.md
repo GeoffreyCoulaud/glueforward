@@ -9,8 +9,10 @@ The goal is to no longer query a file for the exposed port status, but instead u
 
 The recommended way to use glueforward is with docker compose.
 
+<details>
+<summary>Using qBittorrent</summary>
+
 ```yml
-# For qBittorrent:
 services:
   glueforward:
     image: ghcr.io/geoffreycoulaud/glueforward:latest
@@ -29,8 +31,19 @@ services:
     # Insert gluetun service definition here
   qbittorrent:
     # Insert qbittorrent service definition here
+```
 
-# For slskd:
+</details>
+
+<details>
+<summary>Using slskd</summary>
+
+
+⚠️ Make sure **remote configuration is enabled** 
+(see [slskd docs](https://github.com/slskd/slskd/blob/master/docs/config.md#remote-configuration))
+
+
+```yml
 services:
   glueforward:
     image: ghcr.io/geoffreycoulaud/glueforward:latest
@@ -50,6 +63,8 @@ services:
   slskd:
     # Insert slskd service definition here
 ```
+
+</details>
 
 ## Environment variables
 
@@ -155,5 +170,4 @@ services:
 - Ensure that gluetun and your service (qbittorrent/slskd) are reachable from glueforward.  
 For example: If you separate services in different networks, make sure glueforward has access to the appropriate ones.
 - Service types are mutually exclusive (only one service per container instance). For multiple services, run separate containers with different SERVICE_TYPE values.
-- For slskd support, remote configuration must be enabled (see [slskd docs](https://github.com/slskd/slskd/blob/master/docs/config.md))
 - [Gluetun wiki - VPN server port forwarding](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md)
