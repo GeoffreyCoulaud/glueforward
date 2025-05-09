@@ -4,17 +4,18 @@ import sys
 from enum import IntEnum
 from os import getenv
 from time import sleep
+from typing import cast
 
 from errors import RetryableGlueforwardError
 from gluetun import GluetunClient
 from qbittorrent import QBittorrentAuthFailed, QBittorrentClient
-from slskd import SlskdClient
+from slskd import SlskdClient, SlskdAuthFailed
 from service_client import ServiceClient
 
 
 class ReturnCodes(IntEnum):
     MISSING_ENVIRONMENT_VARIABLE = 1
-    QBITTORRENT_AUTHENTICATION_ERROR = 2
+    SERVICE_CLIENT_AUTHENTICATION_ERROR = 2
 
 
 class Application:
@@ -40,7 +41,11 @@ class Application:
 
     def __create_service_client(self) -> ServiceClient:
         """Create and return the appropriate service client based on SERVICE_TYPE"""
-        service_type = self.__optional_getenv("SERVICE_TYPE", "qbittorrent").lower()
+
+        # Since we pass a default value, we can safely cast to str
+        service_type = cast(
+            str, self.__optional_getenv("SERVICE_TYPE", "qbittorrent")
+        ).lower()
 
         if service_type == "qbittorrent":
             return QBittorrentClient(
@@ -118,12 +123,13 @@ class Application:
         while True:
             try:
                 self._loop()
-            except QBittorrentAuthFailed as error:
+            except (QBittorrentAuthFailed, SlskdAuthFailed) as error:
                 logging.critical(
-                    "Could not authenticate to qBittorrent",
+                    "Could not authenticate to service (%s)",
+                    self.__service_client.get_service_name(),
                     exc_info=error,
                 )
-                sys.exit(ReturnCodes.QBITTORRENT_AUTHENTICATION_ERROR)
+                sys.exit(ReturnCodes.SERVICE_CLIENT_AUTHENTICATION_ERROR)
             except RetryableGlueforwardError as error:
                 logging.error("Retryable error in lifecycle", exc_info=error)
                 if error.get_retry_immediately():

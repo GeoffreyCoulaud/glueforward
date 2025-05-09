@@ -1,6 +1,5 @@
 import json
 import logging
-from typing import Optional
 
 import httpx
 
@@ -45,6 +44,9 @@ class QBittorrentClient(ServiceClient):
     __client: httpx.Client
     __credentials: dict[str, str]
 
+    def get_service_name(self):
+        return "qBittorrent"
+
     def __init__(self, url: str, credentials: dict[str, str]):
         self.__credentials = credentials
         self.__client = httpx.Client(base_url=url)
@@ -53,7 +55,7 @@ class QBittorrentClient(ServiceClient):
     def get_is_authenticated(self) -> bool:
         return len(self.__client.cookies) > 0
 
-    def __request(self, method: str, url: str, data: dict[str, str]) -> Optional[httpx.Response]:
+    def __request(self, method: str, url: str, data: dict[str, str]) -> httpx.Response:
         """
         Send a POST request to the qBittorrent API, handling some exceptions
 
@@ -70,11 +72,8 @@ class QBittorrentClient(ServiceClient):
             raise QBittorrentUnreachable(self.__client.base_url) from exception
         except httpx.HTTPStatusError as exception:
             self._handle_request_exception(
-                exception,
-                QBittorrentAuthFailed,
-                QBittorrentSetPortFailed
+                exception, QBittorrentAuthFailed, QBittorrentSetPortFailed
             )
-            return None
 
     def authenticate(self) -> None:
         if self.get_is_authenticated():

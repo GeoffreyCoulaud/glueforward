@@ -1,6 +1,5 @@
 import json
 import logging
-from typing import Optional
 from io import StringIO
 import httpx
 from ruamel.yaml import YAML
@@ -50,8 +49,11 @@ class SlskdIllegalPort(RetryableGlueforwardError):
 class SlskdClient(ServiceClient):
     __client: httpx.Client
     __credentials: dict[str, str]
-    __token: Optional[str] = None
+    __token: str | None = None
     __yaml: YAML
+
+    def get_service_name(self):
+        return "slskd"
 
     def __init__(self, url: str, credentials: dict[str, str]):
         self.__credentials = credentials
@@ -65,7 +67,7 @@ class SlskdClient(ServiceClient):
     def get_is_authenticated(self) -> bool:
         return self.__token is not None
 
-    def __request(self, method: str, url: str, **kwargs) -> Optional[httpx.Response]:
+    def __request(self, method: str, url: str, **kwargs) -> httpx.Response:
         """Send authenticated request to slskd API"""
         headers = kwargs.pop('headers', {})
         if self.get_is_authenticated():
@@ -86,9 +88,8 @@ class SlskdClient(ServiceClient):
             self._handle_request_exception(
                 exception,
                 SlskdAuthFailed,
-                SlskdSetPortFailed
+                SlskdSetPortFailed,
             )
-            return None
 
     def authenticate(self) -> None:
         if self.get_is_authenticated():
