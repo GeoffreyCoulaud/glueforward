@@ -8,6 +8,8 @@ from time import sleep
 from errors import RetryableGlueforwardError
 from gluetun import GluetunClient
 from qbittorrent import QBittorrentAuthFailed, QBittorrentClient
+from slskd import SlskdClient
+from service_client import ServiceClient
 
 
 class ReturnCodes(IntEnum):
@@ -18,7 +20,7 @@ class ReturnCodes(IntEnum):
 class Application:
 
     __gluetun: GluetunClient
-    __qbittorrent: QBittorrentClient
+    __service_client: ServiceClient
     __success_interval: int
     __retry_interval: int
 
@@ -29,11 +31,38 @@ class Application:
             sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
         return value
 
-    def __optional_getenv(self, name: str) -> None | str:
+    def __optional_getenv(self, name: str, default: str | None = None) -> str | None:
         """Get an environment variable or warn if it is not set"""
         if (value := getenv(name)) is None:
             logging.warning("Environment variable %s is not defined", name)
+            return default
         return value
+
+    def __create_service_client(self) -> ServiceClient:
+        """Create and return the appropriate service client based on SERVICE_TYPE"""
+        service_type = self.__optional_getenv("SERVICE_TYPE", "qbittorrent").lower()
+
+        if service_type == "qbittorrent":
+            return QBittorrentClient(
+                url=self.__required_getenv("QBITTORRENT_URL"),
+                credentials={
+                    "username": self.__required_getenv("QBITTORRENT_USERNAME"),
+                    "password": self.__required_getenv("QBITTORRENT_PASSWORD"),
+                },
+            )
+        if service_type == "slskd":
+            return SlskdClient(
+                url=self.__required_getenv("SLSKD_URL"),
+                credentials={
+                    "username": self.__required_getenv("SLSKD_USERNAME"),
+                    "password": self.__required_getenv("SLSKD_PASSWORD"),
+                },
+            )
+        logging.critical(
+            "Invalid SERVICE_TYPE: %s. Must be 'qbittorrent' or 'slskd'", 
+            service_type
+        )
+        sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
 
     def _setup(self) -> None:
         """Setup the application"""
@@ -75,18 +104,12 @@ class Application:
             url=self.__required_getenv("GLUETUN_URL"),
             api_key=self.__optional_getenv("GLUETUN_API_KEY")
         )
-        self.__qbittorrent = QBittorrentClient(
-            url=self.__required_getenv("QBITTORRENT_URL"),
-            credentials={
-                "username": self.__required_getenv("QBITTORRENT_USERNAME"),
-                "password": self.__required_getenv("QBITTORRENT_PASSWORD"),
-            },
-        )
+        self.__service_client = self.__create_service_client()
 
     def _loop(self) -> None:
         """Function called in a loop to check for changes in the forwarded port"""
         forwarded_port = self.__gluetun.get_forwarded_port()
-        self.__qbittorrent.set_port(forwarded_port)
+        self.__service_client.set_port(forwarded_port)
         logging.info("Listening port set to %d", forwarded_port)
 
     def run(self) -> None:

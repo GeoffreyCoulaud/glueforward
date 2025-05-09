@@ -1,6 +1,7 @@
 # glueforward
 
-Updates qbittorrent's listening port to be gluetun's forwarded port on the VPN side.
+Updates application listening ports to match gluetun's forwarded port on the VPN side.
+Supports qBittorrent and slskd via their respective APIs.
 
 The goal is to no longer query a file for the exposed port status, but instead use gluetun's API. This is in preparation for the [deprecation of the file approach in a future version of gluetun](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md#native-integrations).
 
@@ -9,6 +10,7 @@ The goal is to no longer query a file for the exposed port status, but instead u
 The recommended way to use glueforward is with docker compose.
 
 ```yml
+# For qBittorrent:
 services:
   glueforward:
     image: ghcr.io/geoffreycoulaud/glueforward:latest
@@ -16,6 +18,7 @@ services:
     environment:
       GLUETUN_URL: "..."
       GLUETUN_API_KEY: "..."
+      SERVICE_TYPE: "qbittorrent"
       QBITTORRENT_URL: "..."
       QBITTORRENT_USERNAME: "..."
       QBITTORRENT_PASSWORD: "..."
@@ -26,6 +29,26 @@ services:
     # Insert gluetun service definition here
   qbittorrent:
     # Insert qbittorrent service definition here
+
+# For slskd:
+services:
+  glueforward:
+    image: ghcr.io/geoffreycoulaud/glueforward:latest
+    container_name: glueforward
+    environment:
+      GLUETUN_URL: "..."
+      GLUETUN_API_KEY: "..."
+      SERVICE_TYPE: "slskd"
+      SLSKD_URL: "..."
+      SLSKD_USERNAME: "..."
+      SLSKD_PASSWORD: "..."
+    depends_on:
+      - gluetun
+      - slskd
+  gluetun:
+    # Insert gluetun service definition here
+  slskd:
+    # Insert slskd service definition here
 ```
 
 ## Environment variables
@@ -53,21 +76,45 @@ services:
     <td></td>
   </tr>
   <tr>
+    <td>SERVICE_TYPE</td>
+    <td>Service to configure (qbittorrent or slskd)</td>
+    <td>Yes</td>
+    <td>qbittorrent</td>
+  </tr>
+  <tr>
     <td>QBITTORRENT_URL</td>
     <td>Url to the qbittorrent web UI</td>
-    <td>No</td>
+    <td>Yes²</td>
     <td></td>
   </tr>
   <tr>
     <td>QBITTORRENT_USERNAME</td>
     <td>Username to authenticate to qbittorrent</td>
-    <td>No</td>
+    <td>Yes²</td>
     <td></td>
   </tr>
   <tr>
     <td>QBITTORRENT_PASSWORD</td>
     <td>Password to authenticate to qbittorrent</td>
-    <td>No</td>
+    <td>Yes²</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>SLSKD_URL</td>
+    <td>Url to the slskd API</td>
+    <td>Yes³</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>SLSKD_USERNAME</td>
+    <td>Username to authenticate to slskd</td>
+    <td>Yes³</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>SLSKD_PASSWORD</td>
+    <td>Password to authenticate to slskd</td>
+    <td>Yes³</td>
     <td></td>
   </tr>
   <tr>
@@ -100,9 +147,13 @@ services:
 </table>
 
 1. Optional before gluetun v3.40.0, where all control server routes become private by default
+2. Required when SERVICE_TYPE=qbittorrent
+3. Required when SERVICE_TYPE=slskd
 
 ## Other info
 
-- Ensure that gluetun and qbittorrent are reachable from glueforward.  
+- Ensure that gluetun and your service (qbittorrent/slskd) are reachable from glueforward.  
 For example: If you separate services in different networks, make sure glueforward has access to the appropriate ones.
+- Service types are mutually exclusive (only one service per container instance). For multiple services, run separate containers with different SERVICE_TYPE values.
+- For slskd support, remote configuration must be enabled (see [slskd docs](https://github.com/slskd/slskd/blob/master/docs/config.md))
 - [Gluetun wiki - VPN server port forwarding](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md)
