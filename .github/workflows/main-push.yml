@@ -82,9 +82,13 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
+  # If a tag is pushed, also create a draft release
   create-draft-release:
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     needs: build-and-push-image
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
