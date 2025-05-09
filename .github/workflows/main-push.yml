@@ -1,4 +1,4 @@
-name: main-push
+name: Checks and build for pushes on main branch and tags
 
 on:
   workflow_dispatch:
@@ -14,25 +14,15 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Lint the Python code using pylint
+
   lint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Install pylint
-        run: pip install pylint
-      - name: Run pylint
-        run: pylint glueforward
+    uses: ./.github/workflows/lint.yml
 
   build-and-push-image:
     runs-on: ubuntu-latest
+
+    # Ensure that the code is linted before building and pushing the image
+    needs: lint
 
     # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
     permissions:
