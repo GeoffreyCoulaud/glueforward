@@ -50,7 +50,7 @@ class GluetunClient:
 
     def get_forwarded_port(self) -> int:
         try:
-            response = self.__client.get(url="/v1/openvpn/portforwarded")
+            response = self.__client.get(url="/v1/portforward")
             response.raise_for_status()
         except (httpx.ConnectError, httpx.ReadTimeout) as exception:
             raise GluetunUnreachable(self.__client.base_url) from exception
