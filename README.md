@@ -1,7 +1,6 @@
 # glueforward
 
 Updates application listening ports to match gluetun's forwarded port on the VPN side.
-Supports qBittorrent and slskd via their respective APIs.
 
 The goal is to no longer query a file for the exposed port status, but instead use gluetun's API. This is in preparation for the [deprecation of the file approach in a future version of gluetun](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md#native-integrations).
 
@@ -35,37 +34,6 @@ services:
 
 </details>
 
-<details>
-<summary>Using slskd</summary>
-
-
-⚠️ Make sure **remote configuration is enabled** 
-(see [slskd docs](https://github.com/slskd/slskd/blob/master/docs/config.md#remote-configuration))
-
-
-```yml
-services:
-  glueforward:
-    image: ghcr.io/geoffreycoulaud/glueforward:latest
-    container_name: glueforward
-    environment:
-      GLUETUN_URL: "..."
-      GLUETUN_API_KEY: "..."
-      SERVICE_TYPE: "slskd"
-      SLSKD_URL: "..."
-      SLSKD_USERNAME: "..."
-      SLSKD_PASSWORD: "..."
-    depends_on:
-      - gluetun
-      - slskd
-  gluetun:
-    # Insert gluetun service definition here
-  slskd:
-    # Insert slskd service definition here
-```
-
-</details>
-
 ## Environment variables
 
 <table>
@@ -87,49 +55,31 @@ services:
   <tr>
     <td>GLUETUN_API_KEY</td>
     <td>Your gluetun control server <a href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md">API key</a></td>
-    <td>No¹</td>
+    <td>No</td>
     <td></td>
   </tr>
   <tr>
     <td>SERVICE_TYPE</td>
-    <td>Service to configure (qbittorrent or slskd)</td>
+    <td>Service to configure (currently only qbittorrent)</td>
     <td>Yes</td>
     <td>qbittorrent</td>
   </tr>
   <tr>
     <td>QBITTORRENT_URL</td>
     <td>Url to the qbittorrent web UI</td>
-    <td>Yes²</td>
+    <td>Yes¹</td>
     <td></td>
   </tr>
   <tr>
     <td>QBITTORRENT_USERNAME</td>
     <td>Username to authenticate to qbittorrent</td>
-    <td>Yes²</td>
+    <td>Yes¹</td>
     <td></td>
   </tr>
   <tr>
     <td>QBITTORRENT_PASSWORD</td>
     <td>Password to authenticate to qbittorrent</td>
-    <td>Yes²</td>
-    <td></td>
-  </tr>
-  <tr>
-    <td>SLSKD_URL</td>
-    <td>Url to the slskd API</td>
-    <td>Yes³</td>
-    <td></td>
-  </tr>
-  <tr>
-    <td>SLSKD_USERNAME</td>
-    <td>Username to authenticate to slskd</td>
-    <td>Yes³</td>
-    <td></td>
-  </tr>
-  <tr>
-    <td>SLSKD_PASSWORD</td>
-    <td>Password to authenticate to slskd</td>
-    <td>Yes³</td>
+    <td>Yes¹</td>
     <td></td>
   </tr>
   <tr>
@@ -148,7 +98,7 @@ services:
     <td>LOG_LEVEL</td>
     <td>
       Minimum level of severity for a message to be logged.<br/>
-      Available values are 
+      Available values are
       <code>CRITICAL</code>,
       <code>ERROR</code>,
       <code>WARNING</code>,
@@ -161,13 +111,22 @@ services:
 </tbody>
 </table>
 
-1. Optional before gluetun v3.40.0, where all control server routes become private by default
-2. Required when SERVICE_TYPE=qbittorrent
-3. Required when SERVICE_TYPE=slskd
+1. Required when SERVICE_TYPE=qbittorrent
+
+## Migrating from v1 (slskd users)
+
+slskd support has been removed in glueforward v2.0.0. As of **slskd v0.24.4**, port forwarding is natively supported. Glueforward is no longer needed for slskd.
+
+To migrate:
+1. Upgrade slskd to v0.24.4 or later
+2. Configure port forwarding directly in slskd using its native integration
+3. Remove the glueforward container from your compose file
+
+If you start glueforward with `SERVICE_TYPE=slskd`, the container will exit immediately with an error message.
 
 ## Other info
 
-- Ensure that gluetun and your service (qbittorrent/slskd) are reachable from glueforward.  
+- Ensure that gluetun and your service are reachable from glueforward.
 For example: If you separate services in different networks, make sure glueforward has access to the appropriate ones.
 - Service types are mutually exclusive (only one service per container instance). For multiple services, run separate containers with different SERVICE_TYPE values.
 - [Gluetun wiki - VPN server port forwarding](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/vpn-port-forwarding.md)
