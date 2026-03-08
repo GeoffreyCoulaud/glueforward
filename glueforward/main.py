@@ -9,7 +9,6 @@ from typing import cast
 from errors import RetryableGlueforwardError
 from gluetun import GluetunClient
 from qbittorrent import QBittorrentAuthFailed, QBittorrentClient
-from slskd import SlskdClient, SlskdAuthFailed
 from service_client import ServiceClient
 
 
@@ -56,15 +55,14 @@ class Application:
                 },
             )
         if service_type == "slskd":
-            return SlskdClient(
-                url=self.__required_getenv("SLSKD_URL"),
-                credentials={
-                    "username": self.__required_getenv("SLSKD_USERNAME"),
-                    "password": self.__required_getenv("SLSKD_PASSWORD"),
-                },
+            logging.critical(
+                "slskd is no longer supported by glueforward. "
+                "As of slskd v0.24.4, port forwarding is natively supported. "
+                "Please refer to the glueforward README for migration instructions."
             )
+            sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
         logging.critical(
-            "Invalid SERVICE_TYPE: %s. Must be 'qbittorrent' or 'slskd'", 
+            "Invalid SERVICE_TYPE: %s. Must be 'qbittorrent'",
             service_type
         )
         sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
@@ -107,7 +105,7 @@ class Application:
         self.__success_interval = int(getenv("SUCCESS_INTERVAL", str(60 * 5)))
         self.__gluetun = GluetunClient(
             url=self.__required_getenv("GLUETUN_URL"),
-            api_key=self.__optional_getenv("GLUETUN_API_KEY")
+            api_key=self.__required_getenv("GLUETUN_API_KEY")
         )
         self.__service_client = self.__create_service_client()
 
@@ -123,7 +121,7 @@ class Application:
         while True:
             try:
                 self._loop()
-            except (QBittorrentAuthFailed, SlskdAuthFailed) as error:
+            except QBittorrentAuthFailed as error:
                 logging.critical(
                     "Could not authenticate to service (%s)",
                     self.__service_client.get_service_name(),
