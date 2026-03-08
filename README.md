@@ -115,11 +115,12 @@ services:
 
 ## Migrating from v1 (slskd users)
 
-slskd support has been removed in glueforward v2.0.0. As of **slskd v0.24.4**, port forwarding is natively supported. Glueforward is no longer needed for slskd.
+slskd support has been removed in glueforward v2.0.0.  
+As of **slskd v0.24.4**, port forwarding is natively supported. Glueforward is no longer needed for slskd.
 
 To migrate:
 1. Upgrade slskd to v0.24.4 or later
-2. Configure port forwarding directly in slskd using its native integration
+2. Configure port forwarding directly in [slskd's native VPN integration](https://github.com/slskd/slskd/blob/master/docs/config.md#vpn) 
 3. Remove the glueforward container from your compose file
 
 If you start glueforward with `SERVICE_TYPE=slskd`, the container will exit immediately with an error message.
