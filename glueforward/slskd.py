@@ -129,7 +129,7 @@ class SlskdClient(ServiceClient):
         # The slskd API expects a JSON payload containing the YAML as a string property
         # json.dumps() ensures proper string escaping for the JSON payload
         self.__request(
-            method="post",
+            method="put",
             url="/api/v0/options/yaml",
             data=json.dumps(yaml_content),
             headers={"Content-Type": "application/json"}
