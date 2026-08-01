@@ -4,18 +4,17 @@ import sys
 from enum import IntEnum
 from os import getenv
 from time import sleep
-from typing import cast
 
-from errors import RetryableGlueforwardError
+from errors import RetryableError
 from gluetun import GluetunClient
-from qbittorrent import QBittorrentAuthFailed, QBittorrentClient
+from qbittorrent import QBittorrentClient
 from service_client import ServiceClient
 
 
 class ReturnCodes(IntEnum):
     MISSING_ENVIRONMENT_VARIABLE = 1
-    SERVICE_CLIENT_AUTHENTICATION_ERROR = 2
-
+    UNKNOWN_SERVICE_TYPE = 2
+    UNRETRYABLE_EXCEPTION_IN_LIFECYCLE = 3
 
 class Application:
 
@@ -31,21 +30,8 @@ class Application:
             sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
         return value
 
-    def __optional_getenv(self, name: str, default: str | None = None) -> str | None:
-        """Get an environment variable or warn if it is not set"""
-        if (value := getenv(name)) is None:
-            logging.warning("Environment variable %s is not defined", name)
-            return default
-        return value
-
-    def __create_service_client(self) -> ServiceClient:
+    def __create_service_client(self, service_type: str) -> ServiceClient:
         """Create and return the appropriate service client based on SERVICE_TYPE"""
-
-        # Since we pass a default value, we can safely cast to str
-        service_type = cast(
-            str, self.__optional_getenv("SERVICE_TYPE", "qbittorrent")
-        ).lower()
-
         if service_type == "qbittorrent":
             return QBittorrentClient(
                 url=self.__required_getenv("QBITTORRENT_URL"),
@@ -54,18 +40,11 @@ class Application:
                     "password": self.__required_getenv("QBITTORRENT_PASSWORD"),
                 },
             )
-        if service_type == "slskd":
-            logging.critical(
-                "slskd is no longer supported by glueforward. "
-                "As of slskd v0.24.4, port forwarding is natively supported. "
-                "Please refer to the glueforward README for migration instructions."
-            )
-            sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
         logging.critical(
             "Invalid SERVICE_TYPE: %s. Must be 'qbittorrent'",
             service_type
         )
-        sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
+        sys.exit(ReturnCodes.UNKNOWN_SERVICE_TYPE)
 
     def _setup(self) -> None:
         """Setup the application"""
@@ -105,11 +84,13 @@ class Application:
         self.__success_interval = int(getenv("SUCCESS_INTERVAL", str(60 * 5)))
         self.__gluetun = GluetunClient(
             url=self.__required_getenv("GLUETUN_URL"),
-            api_key=self.__required_getenv("GLUETUN_API_KEY")
+            api_key=getenv("GLUETUN_API_KEY"),
         )
-        self.__service_client = self.__create_service_client()
+        self.__service_client = self.__create_service_client(
+            service_type=self.__required_getenv("SERVICE_TYPE")
+        )
 
-    def _loop(self) -> None:
+    def __loop(self) -> None:
         """Function called in a loop to check for changes in the forwarded port"""
         forwarded_port = self.__gluetun.get_forwarded_port()
         self.__service_client.set_port(forwarded_port)
@@ -120,21 +101,20 @@ class Application:
         self._setup()
         while True:
             try:
-                self._loop()
-            except QBittorrentAuthFailed as error:
-                logging.critical(
-                    "Could not authenticate to service (%s)",
-                    self.__service_client.get_service_name(),
-                    exc_info=error,
-                )
-                sys.exit(ReturnCodes.SERVICE_CLIENT_AUTHENTICATION_ERROR)
-            except RetryableGlueforwardError as error:
+                self.__loop()
+            except RetryableError as error:
                 logging.error("Retryable error in lifecycle", exc_info=error)
                 if error.get_retry_immediately():
                     logging.info("Retrying immediately")
                 else:
                     logging.info("Retrying in %d seconds", self.__retry_interval)
                     sleep(self.__retry_interval)
+            except Exception as error:
+                logging.critical(
+                    "Unretryable error in lifecycle, shutting down",
+                    exc_info=error,
+                )
+                sys.exit(ReturnCodes.UNRETRYABLE_EXCEPTION_IN_LIFECYCLE)
             else:
                 sleep(self.__success_interval)
 

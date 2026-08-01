@@ -3,31 +3,31 @@ from typing import TypedDict
 
 import httpx
 
-from errors import GlueforwardError, RetryableGlueforwardError
+from errors import RetryableError
 
 
-class GluetunAuthFailed(GlueforwardError):
+class GluetunAuthFailed(Exception):
     """Exception raised when gluetun authentication fails"""
 
     def __init__(self, *args: object) -> None:
         super().__init__(
             *args,
-            message="Failed to authenticate to Gluetun. See https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md"  # pylint: disable=line-too-long
+            "Failed to authenticate to Gluetun. See https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md",  # pylint: disable=line-too-long
         )
 
 
-class GluetunUnreachable(RetryableGlueforwardError):
+class GluetunUnreachable(RetryableError):
     """Exception raised when gluetun is unreachable"""
 
     def __init__(self, *args: object) -> None:
         super().__init__(*args, message="Failed to reach gluetun")
 
 
-class GluetunGetForwardedPortFailed(RetryableGlueforwardError):
-    """Exception raised when getting port forwarded fails"""
+class GluetunServerError(RetryableError):
+    """Exception raised when gluetun returns a 5xx error"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__(*args, message="Failed to get gluetun forwarded port")
+        super().__init__(*args, message="Internal gluetun server error")
 
 
 class _PortForwardedResponseModel(TypedDict):
@@ -35,18 +35,13 @@ class _PortForwardedResponseModel(TypedDict):
 
 
 class GluetunClient:
-
     __client: httpx.Client
-    __api_key: str
 
     def __init__(self, url: str, api_key: None | str):
         self.__client = httpx.Client(base_url=url)
         if api_key:
             self.__client.headers.update({"X-API-Key": api_key})
         logging.debug("Gluetun client created with base url %s", url)
-
-    def get_has_credentials(self) -> bool:
-        return len(self.__api_key) > 0
 
     def get_forwarded_port(self) -> int:
         try:
@@ -57,7 +52,7 @@ class GluetunClient:
         except httpx.HTTPStatusError as exception:
             if exception.response.status_code == 401:
                 raise GluetunAuthFailed(exception.response.text) from exception
-            raise GluetunGetForwardedPortFailed(
+            raise GluetunServerError(
                 exception.response.status_code,
                 exception.response.text,
             ) from exception
