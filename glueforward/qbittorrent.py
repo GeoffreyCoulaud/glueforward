@@ -3,8 +3,8 @@ import logging
 
 import httpx
 
-from errors import RetryableError
-from service_client import ServiceClient
+from .errors import RetryableError
+from .service_client import ServiceClient
 
 
 class QBittorrentServerError(RetryableError):

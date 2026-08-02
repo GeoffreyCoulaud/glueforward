@@ -7,3 +7,10 @@ requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",
 ]
+
+[project.scripts]
+glueforward = "glueforward.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

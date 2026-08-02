@@ -3,7 +3,7 @@ from typing import TypedDict
 
 import httpx
 
-from errors import RetryableError
+from .errors import RetryableError
 
 
 class GluetunAuthFailed(Exception):

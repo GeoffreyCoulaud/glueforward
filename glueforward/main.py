@@ -5,10 +5,10 @@ from enum import IntEnum
 from os import getenv
 from time import sleep
 
-from errors import RetryableError
-from gluetun import GluetunClient
-from qbittorrent import QBittorrentClient
-from service_client import ServiceClient
+from .errors import RetryableError
+from .gluetun import GluetunClient
+from .qbittorrent import QBittorrentClient
+from .service_client import ServiceClient
 
 
 class ReturnCodes(IntEnum):
@@ -119,5 +119,6 @@ class Application:
                 sleep(self.__success_interval)
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Run the application."""
     Application().run()
