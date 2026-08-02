@@ -5,3 +5,5 @@ __pycache__
 coverage.xml
 htmlcov/
 dist/
+.mypy_cache
+.pytest_cache
