@@ -3,7 +3,7 @@
 import httpx
 import pytest
 
-from glueforward.qbittorrent import (
+from glueforward.main.qbittorrent import (
     QBittorrentAuthenticationNeeded,
     QBittorrentClient,
     QBittorrentForbiddenError,

@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-glueforward = "glueforward.main:main"
+glueforward = "glueforward.main.main:main"
 
 # Dev tools (tests + linters). The `dev` group is installed by default by
 # `uv sync`, so it is excluded from the Docker image via `--no-dev`.
@@ -22,8 +22,12 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "--cov=glueforward --cov-branch --cov-report=term-missing --cov-fail-under=100"
+testpaths = ["glueforward/tests"]
+addopts = "--cov=glueforward.main --cov-branch --cov-report=term-missing --cov-fail-under=100"
+
+# Keep the tests subpackage out of built wheels/sdists.
+[tool.hatch.build]
+exclude = ["glueforward/tests"]
 
 [build-system]
 requires = ["hatchling"]
