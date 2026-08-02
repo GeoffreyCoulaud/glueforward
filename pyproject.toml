@@ -19,10 +19,11 @@ dev = [
     "pytest-cov>=6",
     "pylint>=3.3",
     "pyright>=1.1",
+    "testcontainers>=4.15.0",
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["glueforward/tests"]
+testpaths = ["glueforward/tests/unit"]
 addopts = "--cov=glueforward.main --cov-branch --cov-report=term-missing --cov-fail-under=100"
 
 # Keep the tests subpackage out of built wheels/sdists.

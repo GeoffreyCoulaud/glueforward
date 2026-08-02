@@ -7,3 +7,6 @@ htmlcov/
 dist/
 .mypy_cache
 .pytest_cache
+
+# Local secrets for running end-to-end tests (see CONTRIBUTING.md); never commit this.
+.env.e2e.local
