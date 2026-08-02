@@ -15,17 +15,14 @@ env:
 
 jobs:
 
-  lint:
-    uses: ./.github/workflows/lint.yml
-
-  test:
-    uses: ./.github/workflows/test.yml
+  check:
+    uses: ./.github/workflows/check.yml
 
   build-and-push-image:
     runs-on: ubuntu-latest
 
-    #  Ensure that the code is linted and tested before building and pushing the image
-    needs: [lint, test]
+    #  Ensure that the code passes checks before building and pushing the image
+    needs: check
 
     # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
     permissions:
