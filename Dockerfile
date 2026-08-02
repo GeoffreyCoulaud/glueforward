@@ -1,7 +1,7 @@
 FROM python:3.12-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS builder
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:0.8.11 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.8.11@sha256:8101ad825250a114e7bef89eefaa73c31e34e10ffbe5aff01562740bac97553c /uv /uvx /bin/
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_PYTHON_DOWNLOADS=0
 # The BuildKit cache lives on a different filesystem than /app, so hardlinks
