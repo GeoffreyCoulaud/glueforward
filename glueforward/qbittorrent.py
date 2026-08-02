@@ -64,6 +64,8 @@ class QBittorrentClient(ServiceClient):
                 data=self.__credentials,
             )
             response.raise_for_status()
+        except (httpx.ConnectError, httpx.ReadTimeout) as exception:
+            raise QBittorrentUnreachable(self.__client.base_url) from exception
         except httpx.HTTPStatusError as exception:
             if exception.response.status_code == 403:
                 raise QBittorrentForbiddenError from exception
@@ -85,6 +87,8 @@ class QBittorrentClient(ServiceClient):
                 data={"json": json.dumps(data)},
             )
             response.raise_for_status()
+        except (httpx.ConnectError, httpx.ReadTimeout) as exception:
+            raise QBittorrentUnreachable(self.__client.base_url) from exception
         except httpx.HTTPStatusError as exception:
             if exception.response.status_code == 401:
                 # If failed here, we were authenticated before but the session expired,
