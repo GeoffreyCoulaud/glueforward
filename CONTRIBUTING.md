@@ -35,6 +35,6 @@ Branch coverage must stay at 100%; the test run fails otherwise.
 ## Lint
 
 ```sh
-uv run pylint glueforward
-uv run pyright glueforward
+uv run pylint glueforward/main
+uv run pyright glueforward/main
 ```

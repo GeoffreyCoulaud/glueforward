@@ -3,7 +3,7 @@
 import httpx
 import pytest
 
-from glueforward.gluetun import (
+from glueforward.main.gluetun import (
     GluetunAuthFailed,
     GluetunClient,
     GluetunServerError,

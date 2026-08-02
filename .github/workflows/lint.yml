@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
       - name: Run pylint
-        run: uv run pylint glueforward
+        run: uv run pylint glueforward/main
 
   pyright:
     runs-on: ubuntu-latest
@@ -31,4 +31,4 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
       - name: Run pyright
-        run: uv run pyright glueforward
+        run: uv run pyright glueforward/main

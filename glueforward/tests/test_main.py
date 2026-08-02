@@ -4,10 +4,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from glueforward.errors import RetryableError
-from glueforward.gluetun import GluetunClient
-from glueforward.main import Application, ReturnCodes, main
-from glueforward.qbittorrent import QBittorrentClient
+from glueforward.main.errors import RetryableError
+from glueforward.main.gluetun import GluetunClient
+from glueforward.main.main import Application, ReturnCodes, main
+from glueforward.main.qbittorrent import QBittorrentClient
 
 # Full, valid environment for _setup.
 VALID_ENV = {
@@ -99,7 +99,7 @@ def test_run_handles_lifecycle_branches(monkeypatch):
         ),
     )
     sleep = MagicMock()
-    monkeypatch.setattr("glueforward.main.sleep", sleep)
+    monkeypatch.setattr("glueforward.main.main.sleep", sleep)
 
     with pytest.raises(SystemExit) as exc:
         app.run()

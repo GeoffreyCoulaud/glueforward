@@ -9,6 +9,6 @@ __pycache__/
 Dockerfile
 .dockerignore
 docker-compose*.yml
-tests
+glueforward/tests
 CONTRIBUTING.md
 .pylintrc
