@@ -1,4 +1,4 @@
-name: Lint the project using various tools
+name: Run checks
 
 on:
   workflow_call:
@@ -32,3 +32,17 @@ jobs:
         run: uv sync --frozen
       - name: Run pyright
         run: uv run pyright glueforward/main
+
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Run tests
+        run: uv run pytest
