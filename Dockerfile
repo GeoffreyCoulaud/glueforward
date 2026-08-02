@@ -10,8 +10,7 @@ ENV UV_LINK_MODE=copy
 
 WORKDIR /app
 
-# Dependencies first, in a cached layer independent of source changes.
-# --no-dev keeps the test/lint tools out of the runtime image.
+# Production dependencies first, in a cached layer independent of source changes.
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
@@ -30,6 +29,7 @@ RUN uv sync --locked --no-editable --no-dev
 FROM python:3.12-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS runtime
 
 WORKDIR /app
+
 # Only the venv: it carries the installed package and the `glueforward` entry point.
 COPY --from=builder /app/.venv /app/.venv
 
