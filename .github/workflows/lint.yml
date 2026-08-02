@@ -5,30 +5,30 @@ on:
 
 jobs:
 
-  lint-pylint:
+  pylint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: 3.12
+          enable-cache: true
       - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Install pylint
-        run: pip install pylint
+        run: uv sync --frozen
+      - name: Run pylint
+        run: uv run pylint glueforward
 
-  lint-pyright:
+  pyright:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: 3.12
+          enable-cache: true
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: uv sync --frozen
       - name: Run pyright
-        uses: jakebailey/pyright-action@v1
+        run: uv run pyright glueforward

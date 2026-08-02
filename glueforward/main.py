@@ -109,7 +109,7 @@ class Application:
                 else:
                     logging.info("Retrying in %d seconds", self.__retry_interval)
                     sleep(self.__retry_interval)
-            except Exception as error:
+            except Exception as error:  # pylint: disable=broad-exception-caught
                 logging.critical(
                     "Unretryable error in lifecycle, shutting down",
                     exc_info=error,
