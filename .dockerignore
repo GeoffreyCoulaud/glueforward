@@ -1,8 +1,14 @@
 .git
 .gitignore
+.github
+.vscode
 .venv
+.mypy_cache
 __pycache__/
 *.pyc
 Dockerfile
 .dockerignore
 docker-compose*.yml
+tests
+CONTRIBUTING.md
+.pylintrc
