@@ -3,6 +3,7 @@
 import httpx
 import pytest
 
+from glueforward.main.errors import RetryableError
 from glueforward.main.gluetun import (
     GluetunAuthFailed,
     GluetunClient,
@@ -10,6 +11,20 @@ from glueforward.main.gluetun import (
     GluetunServerError,
     GluetunUnreachable,
 )
+
+
+@pytest.mark.parametrize(
+    "error, is_retryable",
+    [
+        (GluetunUnreachable, True),
+        (GluetunServerError, True),
+        (GluetunNoForwardedPort, True),
+        (GluetunAuthFailed, False),
+    ],
+)
+def test_retry_policy(error, is_retryable):
+    """A tunnel comes back on its own; a rejected API key never does."""
+    assert issubclass(error, RetryableError) is is_retryable
 
 
 def test_init_sets_api_key_header(mock_httpx):

@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlencode
 import httpx
 import pytest
 
+from glueforward.main.errors import RetryableError
 from glueforward.main.qbittorrent import (
     QBittorrentAuthenticationNeeded,
     QBittorrentBanned,
@@ -25,6 +26,27 @@ from glueforward.main.qbittorrent import (
 CREDENTIALS = {"username": "user", "password": "pass"}
 LOGIN_PATH = "/api/v2/auth/login"
 SET_PREFS_PATH = "/api/v2/app/setPreferences"
+
+
+@pytest.mark.parametrize(
+    "error, is_retryable",
+    [
+        (QBittorrentUnreachable, True),
+        (QBittorrentServerError, True),
+        (QBittorrentBanned, True),
+        (QBittorrentAuthenticationNeeded, True),
+        (QBittorrentInvalidCredentials, False),
+    ],
+)
+def test_retry_policy(error, is_retryable):
+    """Retrying a rejected password only gets the caller banned."""
+    assert issubclass(error, RetryableError) is is_retryable
+
+
+def test_only_reauthentication_is_retried_immediately():
+    """Waiting is what keeps a service that is down from being hammered."""
+    assert QBittorrentAuthenticationNeeded().get_retry_immediately() is True
+    assert QBittorrentUnreachable().get_retry_immediately() is False
 
 
 def _login_ok(_: httpx.Request) -> httpx.Response:
@@ -63,11 +85,11 @@ def test_set_port_sends_the_requests_qbittorrent_expects(mock_httpx):
 
     client.set_port(4242)
 
-    login, set_preferences = seen
-    assert login == ("POST", LOGIN_PATH, urlencode(CREDENTIALS))
-    assert set_preferences[:2] == ("POST", SET_PREFS_PATH)
+    assert len(seen) == 2
+    assert seen[0] == ("POST", LOGIN_PATH, urlencode(CREDENTIALS))
+    assert seen[1][:2] == ("POST", SET_PREFS_PATH)
     # A forwarded port is useless if qBittorrent may still pick its own.
-    assert json.loads(parse_qs(set_preferences[2])["json"][0]) == {
+    assert json.loads(parse_qs(seen[1][2])["json"][0]) == {
         "listen_port": 4242,
         "random_port": False,
         "upnp": False,
