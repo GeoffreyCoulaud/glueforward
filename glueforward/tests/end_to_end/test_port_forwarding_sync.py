@@ -48,7 +48,11 @@ def test_glueforward_syncs_qbittorrent_port_to_gluetun_forwarded_port(
         response.raise_for_status()
         return response.json()["port"] or None
 
-    forwarded_port = _poll_until(get_forwarded_port, timeout=120)
+    # Generous, because this waits out the whole of gluetun's startup: picking
+    # a server, negotiating the WireGuard tunnel, retrying that negotiation if
+    # the first server does not answer, and only then asking ProtonVPN to
+    # forward a port. Nothing before this point waits for the tunnel.
+    forwarded_port = _poll_until(get_forwarded_port, timeout=240)
 
     def get_configured_listen_port():
         response = qbittorrent_client.get("/api/v2/app/preferences")

@@ -23,7 +23,7 @@ import pytest
 from dotenv import load_dotenv
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.network import Network
-from testcontainers.core.wait_strategies import HealthcheckWaitStrategy, LogMessageWaitStrategy
+from testcontainers.core.wait_strategies import LogMessageWaitStrategy, PortWaitStrategy
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(REPO_ROOT / ".env.e2e.local")
@@ -37,6 +37,24 @@ QBITTORRENT_USERNAME = "admin"
 _TEMPORARY_PASSWORD_PATTERN = re.compile(
     r"temporary password is provided for this session:\s*(\S+)", re.IGNORECASE
 )
+
+# gluetun draws a settings tree at startup that includes a partially redacted
+# copy of the WireGuard private key ("Private key: 2zF...Og="). Its runtime log
+# lines all start with a timestamp and the tree's lines do not, so keeping only
+# timestamped lines keeps the diagnosis and leaves the key material out.
+_GLUETUN_LOG_LINE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T")
+
+
+def _print_gluetun_log(container) -> None:
+    """Print gluetun's runtime log, for when the tunnel never comes up.
+
+    pytest only surfaces captured output for failing tests, so this costs
+    nothing on a passing run, and is the only account of what gluetun was
+    doing on a failing one.
+    """
+    stdout, stderr = container.get_logs()
+    lines = (stdout + b"\n" + stderr).decode(errors="replace").splitlines()
+    print("\n".join(line for line in lines if _GLUETUN_LOG_LINE_PATTERN.match(line)))
 
 
 @pytest.fixture(scope="module")
@@ -79,14 +97,21 @@ def gluetun_container(network, gluetun_api_key):
             "HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE",
             json.dumps({"auth": "apikey", "apikey": gluetun_api_key}),
         )
-        # gluetun ships a HEALTHCHECK that only turns healthy once the VPN
-        # tunnel is actually up; real WireGuard negotiation can take a while.
-        .waiting_for(HealthcheckWaitStrategy().with_startup_timeout(180))
+        # Only wait for the control server to listen, which it does right away,
+        # long before the tunnel is up. Waiting on gluetun's own HEALTHCHECK
+        # cannot work: it allows 10s of start period plus three 5s retries, so
+        # Docker declares the container unhealthy about 25s in, and
+        # HealthcheckWaitStrategy gives up the instant it sees that rather than
+        # waiting out its startup timeout. Real WireGuard negotiation regularly
+        # needs longer. The test polls for the forwarded port instead, which is
+        # the condition it actually depends on.
+        .waiting_for(PortWaitStrategy(GLUETUN_CONTROL_PORT))
     )
     try:
         container.start()
         yield container
     finally:
+        _print_gluetun_log(container)
         container.stop()
 
 
