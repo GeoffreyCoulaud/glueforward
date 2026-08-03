@@ -70,6 +70,11 @@ def gluetun_container(network, gluetun_api_key):
         .with_env("WIREGUARD_PRIVATE_KEY", os.environ["WIREGUARD_PRIVATE_KEY"])
         .with_env("SERVER_COUNTRIES", os.environ.get("SERVER_COUNTRIES", "Netherlands"))
         .with_env("VPN_PORT_FORWARDING", "on")
+        # Only a subset of ProtonVPN's servers forward ports, and gluetun picks
+        # one at random among those matching the filters above. Without this the
+        # tunnel still comes up, so the healthcheck below goes green, but
+        # /v1/portforward stays empty forever and the test times out.
+        .with_env("PORT_FORWARD_ONLY", "on")
         .with_env(
             "HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE",
             json.dumps({"auth": "apikey", "apikey": gluetun_api_key}),
