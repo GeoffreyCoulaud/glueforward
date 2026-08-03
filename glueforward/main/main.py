@@ -18,26 +18,33 @@ class ReturnCodes(IntEnum):
 
 class Application:
 
-    __gluetun: GluetunClient
-    __service_client: ServiceClient
-    __success_interval: int
-    __retry_interval: int
+    def __init__(self) -> None:
+        self._configure_logging()
+        self._retry_interval = int(getenv("RETRY_INTERVAL", str(10)))
+        self._success_interval = int(getenv("SUCCESS_INTERVAL", str(60 * 5)))
+        self._gluetun = GluetunClient(
+            url=self._required_getenv("GLUETUN_URL"),
+            api_key=getenv("GLUETUN_API_KEY"),
+        )
+        self._service_client = self._create_service_client(
+            service_type=self._required_getenv("SERVICE_TYPE")
+        )
 
-    def __required_getenv(self, name: str) -> str:
+    def _required_getenv(self, name: str) -> str:
         """Get an environment variable or exit if it is not set"""
         if (value := getenv(name)) is None:
             logging.critical("Environment variable %s is required", name)
             sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
         return value
 
-    def __create_service_client(self, service_type: str) -> ServiceClient:
+    def _create_service_client(self, service_type: str) -> ServiceClient:
         """Create and return the appropriate service client based on SERVICE_TYPE"""
         if service_type == "qbittorrent":
             return QBittorrentClient(
-                url=self.__required_getenv("QBITTORRENT_URL"),
+                url=self._required_getenv("QBITTORRENT_URL"),
                 credentials={
-                    "username": self.__required_getenv("QBITTORRENT_USERNAME"),
-                    "password": self.__required_getenv("QBITTORRENT_PASSWORD"),
+                    "username": self._required_getenv("QBITTORRENT_USERNAME"),
+                    "password": self._required_getenv("QBITTORRENT_PASSWORD"),
                 },
             )
         logging.critical(
@@ -46,10 +53,9 @@ class Application:
         )
         sys.exit(ReturnCodes.UNKNOWN_SERVICE_TYPE)
 
-    def _setup(self) -> None:
-        """Setup the application"""
-
-        # Configure logging
+    @staticmethod
+    def _configure_logging() -> None:
+        """Configure logging from the LOG_LEVEL environment variable"""
         log_level = (
             environment_log_level
             if (environment_log_level := getenv("LOG_LEVEL"))
@@ -79,36 +85,24 @@ class Application:
             level=log_level, format="%(asctime)s [%(levelname)s] %(message)s"
         )
 
-        # Initialize the state
-        self.__retry_interval = int(getenv("RETRY_INTERVAL", str(10)))
-        self.__success_interval = int(getenv("SUCCESS_INTERVAL", str(60 * 5)))
-        self.__gluetun = GluetunClient(
-            url=self.__required_getenv("GLUETUN_URL"),
-            api_key=getenv("GLUETUN_API_KEY"),
-        )
-        self.__service_client = self.__create_service_client(
-            service_type=self.__required_getenv("SERVICE_TYPE")
-        )
-
-    def __loop(self) -> None:
+    def _loop(self) -> None:
         """Function called in a loop to check for changes in the forwarded port"""
-        forwarded_port = self.__gluetun.get_forwarded_port()
-        self.__service_client.set_port(forwarded_port)
+        forwarded_port = self._gluetun.get_forwarded_port()
+        self._service_client.set_port(forwarded_port)
         logging.info("Listening port set to %d", forwarded_port)
 
     def run(self) -> None:
-        """App entry point, in charge of setting up the app and starting the loop"""
-        self._setup()
+        """App entry point, in charge of starting the loop"""
         while True:
             try:
-                self.__loop()
+                self._loop()
             except RetryableError as error:
                 logging.error("Retryable error in lifecycle", exc_info=error)
                 if error.get_retry_immediately():
                     logging.info("Retrying immediately")
                 else:
-                    logging.info("Retrying in %d seconds", self.__retry_interval)
-                    sleep(self.__retry_interval)
+                    logging.info("Retrying in %d seconds", self._retry_interval)
+                    sleep(self._retry_interval)
             except Exception as error:  # pylint: disable=broad-exception-caught
                 logging.critical(
                     "Unretryable error in lifecycle, shutting down",
@@ -116,7 +110,7 @@ class Application:
                 )
                 sys.exit(ReturnCodes.UNRETRYABLE_EXCEPTION_IN_LIFECYCLE)
             else:
-                sleep(self.__success_interval)
+                sleep(self._success_interval)
 
 
 def main() -> None:
