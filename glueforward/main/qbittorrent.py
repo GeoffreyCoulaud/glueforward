@@ -45,56 +45,56 @@ class QBittorrentAuthenticationNeeded(RetryableError):
 
 class QBittorrentClient(ServiceClient):
 
-    __client: httpx.Client
-    __credentials: dict[str, str]
+    _client: httpx.Client
+    _credentials: dict[str, str]
 
     def __init__(self, url: str, credentials: dict[str, str]):
-        self.__credentials = credentials
-        self.__client = httpx.Client(base_url=url)
+        self._credentials = credentials
+        self._client = httpx.Client(base_url=url)
         logging.debug("qBittorrent client created with base url %s", url)
 
-    def __get_is_authenticated(self) -> bool:
-        return len(self.__client.cookies) > 0
+    def _get_is_authenticated(self) -> bool:
+        return len(self._client.cookies) > 0
 
-    def __authenticate(self) -> None:
+    def _authenticate(self) -> None:
         logging.debug("Authenticating to qBittorrent")
         try:
-            response = self.__client.post(
+            response = self._client.post(
                 url="/api/v2/auth/login",
-                data=self.__credentials,
+                data=self._credentials,
             )
             response.raise_for_status()
         except (httpx.ConnectError, httpx.ReadTimeout) as exception:
-            raise QBittorrentUnreachable(self.__client.base_url) from exception
+            raise QBittorrentUnreachable(self._client.base_url) from exception
         except httpx.HTTPStatusError as exception:
             if exception.response.status_code == 403:
                 raise QBittorrentForbiddenError from exception
             raise QBittorrentServerError from exception
-        self.__client.cookies.update(response.cookies)
+        self._client.cookies.update(response.cookies)
         logging.debug("qBittorrent client authenticated")
 
-    def __reset_authentication(self) -> None:
-        self.__client.cookies.clear()
+    def _reset_authentication(self) -> None:
+        self._client.cookies.clear()
         logging.debug("qBittorrent client authentication reset")
 
     def set_port(self, port: int) -> None:
-        if not self.__get_is_authenticated():
-            self.__authenticate()
+        if not self._get_is_authenticated():
+            self._authenticate()
         data = {"listen_port": port, "random_port": False, "upnp": False}
         try:
-            response = self.__client.post(
+            response = self._client.post(
                 url="/api/v2/app/setPreferences",
                 data={"json": json.dumps(data)},
             )
             response.raise_for_status()
         except (httpx.ConnectError, httpx.ReadTimeout) as exception:
-            raise QBittorrentUnreachable(self.__client.base_url) from exception
+            raise QBittorrentUnreachable(self._client.base_url) from exception
         except httpx.HTTPStatusError as exception:
             if exception.response.status_code == 401:
                 # If failed here, we were authenticated before but the session expired,
                 # so we need to reauthenticate and retry.
                 logging.warning("qBittorrent session expired")
-                self.__reset_authentication()
+                self._reset_authentication()
                 raise QBittorrentAuthenticationNeeded from exception
             raise exception
         logging.info("Successfully set qBittorrent port")

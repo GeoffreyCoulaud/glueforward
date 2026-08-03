@@ -2,7 +2,6 @@
 
 # The authentication state under test has no public accessor.
 # pylint: disable=protected-access
-# pyright: reportAttributeAccessIssue=false
 
 import httpx
 import pytest
@@ -35,7 +34,7 @@ def test_set_port_authenticates_then_succeeds(mock_httpx):
 
     # First call: not authenticated yet, so it authenticates first.
     client.set_port(11111)
-    assert client._QBittorrentClient__get_is_authenticated() is True
+    assert client._get_is_authenticated() is True
 
     # Second call: already authenticated, skips re-authentication.
     client.set_port(22222)
@@ -87,7 +86,7 @@ def test_set_port_session_expired(mock_httpx):
     with pytest.raises(QBittorrentAuthenticationNeeded):
         client.set_port(11111)
     # The expired session must have been reset.
-    assert client._QBittorrentClient__get_is_authenticated() is False
+    assert client._get_is_authenticated() is False
 
 
 def test_set_port_other_http_error_reraised(mock_httpx):

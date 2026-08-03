@@ -41,11 +41,8 @@ jobs:
           save-cache: ${{ inputs.cache-write }}
       - name: Install dependencies
         run: uv sync --frozen
-      - name: Run pylint on the application
-        run: uv run pylint glueforward/main
-      # Separate run: linted together, the tests raise an unsuppressable invalid-name.
-      - name: Run pylint on the tests
-        run: uv run pylint glueforward/tests
+      - name: Run pylint
+        run: uv run pylint glueforward
 
   pyright:
     runs-on: ubuntu-latest
