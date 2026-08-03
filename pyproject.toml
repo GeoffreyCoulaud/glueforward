@@ -23,11 +23,16 @@ dev = [
     # Imported directly by the end-to-end conftest, so declared rather than
     # relied on as a transitive dependency of testcontainers.
     "python-dotenv>=1",
+    "pytest-xdist>=3.8.0",
+    "filelock>=3.32.2",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["glueforward/tests/unit"]
 addopts = "--cov=glueforward.main --cov-branch --cov-report=term-missing --cov-fail-under=100"
+markers = [
+    "vpn: end-to-end test needing a real ProtonVPN connection, and its WireGuard key",
+]
 
 # Keep the tests subpackage out of built wheels/sdists.
 [tool.hatch.build]

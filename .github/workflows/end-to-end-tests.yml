@@ -58,9 +58,10 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      # Uses a real ProtonVPN key: never log it.
+      # Uses a real ProtonVPN key: never log it. Only the tests that need the
+      # tunnel run here; the others already ran unattended in check.yml.
       - name: Run end-to-end tests
-        run: uv run pytest glueforward/tests/end_to_end -o addopts=""
+        run: uv run pytest glueforward/tests/end_to_end -o addopts="" -m vpn
         env:
           WIREGUARD_PRIVATE_KEY: ${{ secrets.wireguard-private-key }}
           E2E_CACHE_WRITE: ${{ inputs.cache-write }}

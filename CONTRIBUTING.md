@@ -34,9 +34,20 @@ Branch coverage must stay at 100%; the test run fails otherwise.
 
 ## Run the end-to-end tests
 
-Unlike the tests above, these spin up real Docker containers, gluetun connected to a real ProtonVPN account, a real qBittorrent, and glueforward built straight from the repository's `Dockerfile`, and assert the app's behavior purely from the outside, through the same public APIs a real deployment would use.
+Unlike the tests above, these spin up real Docker containers, a real qBittorrent, and glueforward built straight from the repository's `Dockerfile`, and assert the app's behavior purely from the outside, through the same public APIs a real deployment would use.
 
-They require:
+Every container is created per test, so tests share nothing, may run in any order, and may run in parallel with `-n`:
+
+```sh
+uv run pytest glueforward/tests/end_to_end -o addopts="" -n 4
+```
+
+They come in two families:
+
+- Most of them need no VPN tunnel, and therefore no secret. gluetun's control server is stood in for by a small HTTP server the test drives, which is the only way to choose a forwarded port and change it on command. Run them with `-m "not vpn"`.
+- A few pin glueforward against gluetun's real port forwarding, and need a real ProtonVPN connection. They are marked `vpn`.
+
+The `vpn` ones require:
 
 - Docker, with access to `/dev/net/tun` (the default on Linux hosts)
 - A ProtonVPN account with [port forwarding](https://protonvpn.com/support/wireguard-configurations/) enabled, and its WireGuard private key
@@ -58,7 +69,9 @@ uv run pytest glueforward/tests/end_to_end -o addopts=""
 
 The `-o addopts=""` resets the coverage flags from `pyproject.toml`: they target `glueforward.main` in-process and don't make sense here, since the code under test runs in a separate container.
 
-Without `WIREGUARD_PRIVATE_KEY` set, these tests are skipped automatically, and a plain `uv run pytest` never runs them (they're outside `testpaths`). Expect a real run to take a minute or two: it builds an image and negotiates a real VPN connection.
+Without `WIREGUARD_PRIVATE_KEY` set, the `vpn` tests are skipped automatically, and a plain `uv run pytest` never runs any of these (they're outside `testpaths`). One WireGuard key is one VPN session, so the `vpn` tests hold a lock and run one at a time however you invoke them. Expect them to take about forty seconds each: they build an image and negotiate a real VPN connection.
+
+In CI they are split accordingly. The tests needing no key run in `check.yml`, on every pull request, forks included. The `vpn` ones run in `end-to-end-tests.yml`, behind the approval described below.
 
 ## Approving end-to-end tests on a fork pull request
 
