@@ -72,6 +72,7 @@ That approval is the *only* barrier between the fork's code and the key. Before 
 uv run pylint glueforward/main
 uv run pylint glueforward/tests
 uv run pyright glueforward
+docker run --rm -v "$(pwd):/repo" --workdir /repo rhysd/actionlint:1.7.7
 ```
 
 Both linters cover the tests as well as the application. pylint takes two runs rather than one over `glueforward`: the unit tests assign name-mangled attributes, and pylint judges those names in the scope of the class that owns them rather than the file they appear in, so linting the application alongside them reports violations that nothing in a test file can suppress.
