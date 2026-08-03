@@ -6,6 +6,7 @@ import pytest
 from glueforward.main.gluetun import (
     GluetunAuthFailed,
     GluetunClient,
+    GluetunNoForwardedPort,
     GluetunServerError,
     GluetunUnreachable,
 )
@@ -40,19 +41,24 @@ def test_get_forwarded_port_success(mock_httpx):
     assert client.get_forwarded_port() == 50000
 
 
-def test_get_forwarded_port_connect_error(mock_httpx):
+def test_get_forwarded_port_not_forwarded_yet(mock_httpx):
     def handler(_: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("boom")
+        return httpx.Response(200, json={"port": 0})
 
     mock_httpx(handler)
     client = GluetunClient(url="http://gluetun", api_key=None)
-    with pytest.raises(GluetunUnreachable):
+    with pytest.raises(GluetunNoForwardedPort):
         client.get_forwarded_port()
 
 
-def test_get_forwarded_port_read_timeout(mock_httpx):
+@pytest.mark.parametrize(
+    "exception",
+    [httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout],
+    ids=["connect_error", "read_timeout", "connect_timeout"],
+)
+def test_get_forwarded_port_unreachable(mock_httpx, exception):
     def handler(_: httpx.Request) -> httpx.Response:
-        raise httpx.ReadTimeout("slow")
+        raise exception("boom")
 
     mock_httpx(handler)
     client = GluetunClient(url="http://gluetun", api_key=None)
