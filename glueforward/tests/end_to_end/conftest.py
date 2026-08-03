@@ -41,20 +41,12 @@ _TEMPORARY_PASSWORD_PATTERN = re.compile(
     r"temporary password is provided for this session:\s*(\S+)", re.IGNORECASE
 )
 
-# gluetun draws a settings tree at startup that includes a partially redacted
-# copy of the WireGuard private key ("Private key: 2zF...Og="). Its runtime log
-# lines all start with a timestamp and the tree's lines do not, so keeping only
-# timestamped lines keeps the diagnosis and leaves the key material out.
+# Runtime log lines are timestamped; the startup settings tree is not.
 _GLUETUN_LOG_LINE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T")
 
 
 def _print_gluetun_log(container) -> None:
-    """Print gluetun's runtime log, for when the tunnel never comes up.
-
-    pytest only surfaces captured output for failing tests, so this costs
-    nothing on a passing run, and is the only account of what gluetun was
-    doing on a failing one.
-    """
+    """Print gluetun's runtime log; pytest only shows it when the test fails."""
     stdout, stderr = container.get_logs()
     lines = (stdout + b"\n" + stderr).decode(errors="replace").splitlines()
     print("\n".join(line for line in lines if _GLUETUN_LOG_LINE_PATTERN.match(line)))
