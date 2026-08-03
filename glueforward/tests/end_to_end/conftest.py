@@ -81,30 +81,17 @@ def gluetun_container(network, gluetun_api_key):
         .with_network(network)
         .with_network_aliases("gluetun")
         .with_exposed_ports(GLUETUN_CONTROL_PORT)
-        # ProtonVPN WireGuard needs to create a tun interface and manage routes/firewall rules.
         .with_kwargs(cap_add=["NET_ADMIN"], devices=["/dev/net/tun:/dev/net/tun"])
         .with_env("VPN_SERVICE_PROVIDER", "protonvpn")
         .with_env("VPN_TYPE", "wireguard")
         .with_env("WIREGUARD_PRIVATE_KEY", os.environ["WIREGUARD_PRIVATE_KEY"])
         .with_env("SERVER_COUNTRIES", os.environ.get("SERVER_COUNTRIES", "Netherlands"))
         .with_env("VPN_PORT_FORWARDING", "on")
-        # Only a subset of ProtonVPN's servers forward ports, and gluetun picks
-        # one at random among those matching the filters above. Without this the
-        # tunnel still comes up, so the healthcheck below goes green, but
-        # /v1/portforward stays empty forever and the test times out.
         .with_env("PORT_FORWARD_ONLY", "on")
         .with_env(
             "HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE",
             json.dumps({"auth": "apikey", "apikey": gluetun_api_key}),
         )
-        # Only wait for the control server to listen, which it does right away,
-        # long before the tunnel is up. Waiting on gluetun's own HEALTHCHECK
-        # cannot work: it allows 10s of start period plus three 5s retries, so
-        # Docker declares the container unhealthy about 25s in, and
-        # HealthcheckWaitStrategy gives up the instant it sees that rather than
-        # waiting out its startup timeout. Real WireGuard negotiation regularly
-        # needs longer. The test polls for the forwarded port instead, which is
-        # the condition it actually depends on.
         .waiting_for(PortWaitStrategy(GLUETUN_CONTROL_PORT))
     )
     try:
