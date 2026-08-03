@@ -11,6 +11,9 @@ It is loaded either from the real environment or from a gitignored
 ".env.e2e.local" file at the repository root, and is never logged.
 """
 
+# pytest resolves fixtures by parameter name, so the shadowing is deliberate.
+# pylint: disable=redefined-outer-name
+
 import json
 import os
 import re
@@ -188,9 +191,9 @@ def glueforward_image():
 def glueforward_container(
     network,
     glueforward_image,
-    gluetun_container,
+    # Requested so it is running: glueforward dials it by network alias.
+    gluetun_container,  # pylint: disable=unused-argument
     gluetun_api_key,
-    qbittorrent_container,
     qbittorrent_password,
 ):
     container = (

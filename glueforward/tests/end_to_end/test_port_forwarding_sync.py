@@ -41,17 +41,16 @@ def _poll_until(predicate, *, timeout: float, interval: float = 2.0):
 def test_glueforward_syncs_qbittorrent_port_to_gluetun_forwarded_port(
     gluetun_client,
     qbittorrent_client,
-    glueforward_container,
+    # Requested so it is running: this is the application under test.
+    glueforward_container,  # pylint: disable=unused-argument
 ):
     def get_forwarded_port():
         response = gluetun_client.get("/v1/portforward")
         response.raise_for_status()
         return response.json()["port"] or None
 
-    # Generous, because this waits out the whole of gluetun's startup: picking
-    # a server, negotiating the WireGuard tunnel, retrying that negotiation if
-    # the first server does not answer, and only then asking ProtonVPN to
-    # forward a port. Nothing before this point waits for the tunnel.
+    # Nothing before this waits for the tunnel, so this waits out gluetun's
+    # whole startup, retried server negotiation included.
     forwarded_port = _poll_until(get_forwarded_port, timeout=240)
 
     def get_configured_listen_port():

@@ -29,8 +29,14 @@ jobs:
           save-cache: ${{ inputs.cache-write }}
       - name: Install dependencies
         run: uv sync --frozen
-      - name: Run pylint
+      - name: Run pylint on the application
         run: uv run pylint glueforward/main
+      # Deliberately a separate run: the unit tests assign name-mangled
+      # attributes, and pylint judges those names in the scope of the class
+      # that owns them, over in glueforward/main, so no annotation written in
+      # a test file can suppress the resulting invalid-name.
+      - name: Run pylint on the tests
+        run: uv run pylint glueforward/tests
 
   pyright:
     runs-on: ubuntu-latest
@@ -47,8 +53,10 @@ jobs:
           save-cache: ${{ inputs.cache-write }}
       - name: Install dependencies
         run: uv sync --frozen
+      # Covers the tests too, which need no separate run: pyright walks plain
+      # directories and reports each file on its own terms.
       - name: Run pyright
-        run: uv run pyright glueforward/main
+        run: uv run pyright glueforward
 
   pytest:
     runs-on: ubuntu-latest
