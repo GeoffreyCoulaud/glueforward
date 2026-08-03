@@ -32,7 +32,7 @@ def test_init_without_api_key_header(mock_httpx):
 
 
 def test_get_forwarded_port_success(mock_httpx):
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"port": 50000})
 
     mock_httpx(handler)

@@ -1,5 +1,9 @@
 """Unit tests for glueforward.qbittorrent."""
 
+# The authentication state under test has no public accessor.
+# pylint: disable=protected-access
+# pyright: reportAttributeAccessIssue=false
+
 import httpx
 import pytest
 

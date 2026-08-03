@@ -1,5 +1,10 @@
 """Unit tests for glueforward.main."""
 
+# _setup() exposes no accessors, so its wiring is only observable through the
+# name-mangled attributes it sets.
+# pylint: disable=protected-access
+# pyright: reportAttributeAccessIssue=false
+
 from unittest.mock import MagicMock
 
 import pytest
