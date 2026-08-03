@@ -21,14 +21,24 @@ class QBittorrentUnreachable(RetryableError):
         super().__init__(*args, message="Failed to reach qBittorrent")
 
 
-class QBittorrentForbiddenError(Exception):
-    """Exception raised when qbittorrent authentication fails"""
+class QBittorrentInvalidCredentials(Exception):
+    """Exception raised when qbittorrent rejects the configured credentials"""
 
     def __init__(self, *args: object) -> None:
         super().__init__(
             *args,
             "Failed to authenticate to qBittorrent.",
             "Check your credentials, as they may be incorrect.",
+        )
+
+
+class QBittorrentBanned(RetryableError):
+    """Exception raised when qbittorrent has banned us after failed logins"""
+
+    def __init__(self, *args: object) -> None:
+        super().__init__(
+            *args,
+            message="Banned by qBittorrent after too many failed authentications",
         )
 
 
@@ -67,8 +77,11 @@ class QBittorrentClient(ServiceClient):
         except (httpx.ConnectError, httpx.ReadTimeout) as exception:
             raise QBittorrentUnreachable(self._client.base_url) from exception
         except httpx.HTTPStatusError as exception:
+            if exception.response.status_code == 401:
+                raise QBittorrentInvalidCredentials from exception
             if exception.response.status_code == 403:
-                raise QBittorrentForbiddenError from exception
+                # Banned for web_ui_ban_duration seconds, so worth waiting out.
+                raise QBittorrentBanned(exception.response.text) from exception
             raise QBittorrentServerError from exception
         self._client.cookies.update(response.cookies)
         logging.debug("qBittorrent client authenticated")
@@ -90,9 +103,8 @@ class QBittorrentClient(ServiceClient):
         except (httpx.ConnectError, httpx.ReadTimeout) as exception:
             raise QBittorrentUnreachable(self._client.base_url) from exception
         except httpx.HTTPStatusError as exception:
-            if exception.response.status_code == 401:
-                # If failed here, we were authenticated before but the session expired,
-                # so we need to reauthenticate and retry.
+            if exception.response.status_code == 403:
+                # Authenticated earlier, so this is an expired session: renew it.
                 logging.warning("qBittorrent session expired")
                 self._reset_authentication()
                 raise QBittorrentAuthenticationNeeded from exception
