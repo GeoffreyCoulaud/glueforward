@@ -3,13 +3,14 @@
 # Asserts on Application's internals, which have no public accessor.
 # pylint: disable=protected-access
 
+import signal
 from unittest.mock import MagicMock
 
 import pytest
 
 from glueforward.main.errors import RetryableError
 from glueforward.main.gluetun import GluetunClient
-from glueforward.main.main import Application, ReturnCodes, main
+from glueforward.main.main import Application, ReturnCodes, handle_sigterm, main
 from glueforward.main.qbittorrent import QBittorrentClient
 
 # Full, valid environment for building an Application.
@@ -26,6 +27,14 @@ VALID_ENV = {
 def _set_valid_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for name, value in VALID_ENV.items():
         monkeypatch.setenv(name, value)
+
+
+@pytest.fixture(autouse=True)
+def restore_sigterm_handler():
+    """main() installs a process-wide handler, which must not outlive the test."""
+    original = signal.getsignal(signal.SIGTERM)
+    yield
+    signal.signal(signal.SIGTERM, original)
 
 
 def test_init_with_valid_log_level(monkeypatch):
@@ -117,3 +126,18 @@ def test_main_runs_application(monkeypatch):
     main()
 
     run.assert_called_once()
+
+
+def test_main_installs_the_sigterm_handler(monkeypatch):
+    _set_valid_env(monkeypatch)
+    monkeypatch.setattr(Application, "run", MagicMock())
+
+    main()
+
+    assert signal.getsignal(signal.SIGTERM) is handle_sigterm
+
+
+def test_sigterm_exits_without_an_error_code():
+    with pytest.raises(SystemExit) as exc:
+        handle_sigterm(signal.SIGTERM, None)
+    assert exc.value.code == 0
