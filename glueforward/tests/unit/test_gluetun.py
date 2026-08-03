@@ -41,6 +41,20 @@ def test_get_forwarded_port_success(mock_httpx):
     assert client.get_forwarded_port() == 50000
 
 
+def test_get_forwarded_port_requests_the_control_server_endpoint(mock_httpx):
+    """The endpoint is gluetun's, so nothing in this repository can vouch for it."""
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path))
+        return httpx.Response(200, json={"port": 1})
+
+    mock_httpx(handler)
+    GluetunClient(url="http://gluetun", api_key=None).get_forwarded_port()
+
+    assert seen == [("GET", "/v1/portforward")]
+
+
 def test_get_forwarded_port_not_forwarded_yet(mock_httpx):
     def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"port": 0})

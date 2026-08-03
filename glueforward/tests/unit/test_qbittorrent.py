@@ -7,6 +7,9 @@ pinned against a live instance by the end-to-end tests.
 # The authentication state under test has no public accessor.
 # pylint: disable=protected-access
 
+import json
+from urllib.parse import parse_qs, urlencode
+
 import httpx
 import pytest
 
@@ -43,6 +46,32 @@ def test_set_port_authenticates_then_succeeds(mock_httpx):
 
     # Second call: already authenticated, skips re-authentication.
     client.set_port(22222)
+
+
+def test_set_port_sends_the_requests_qbittorrent_expects(mock_httpx):
+    """Both endpoints take form data, and setPreferences wraps its own JSON."""
+    seen: list[tuple[str, str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path, request.content.decode()))
+        if request.url.path == LOGIN_PATH:
+            return _login_ok(request)
+        return httpx.Response(200)
+
+    mock_httpx(handler)
+    client = QBittorrentClient(url="http://qbittorrent", credentials=CREDENTIALS)
+
+    client.set_port(4242)
+
+    login, set_preferences = seen
+    assert login == ("POST", LOGIN_PATH, urlencode(CREDENTIALS))
+    assert set_preferences[:2] == ("POST", SET_PREFS_PATH)
+    # A forwarded port is useless if qBittorrent may still pick its own.
+    assert json.loads(parse_qs(set_preferences[2])["json"][0]) == {
+        "listen_port": 4242,
+        "random_port": False,
+        "upnp": False,
+    }
 
 
 def test_authenticate_invalid_credentials(mock_httpx):
