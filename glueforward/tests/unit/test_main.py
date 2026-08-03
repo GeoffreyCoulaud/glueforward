@@ -1,7 +1,6 @@
 """Unit tests for glueforward.main."""
 
-# _setup() exposes no accessors, so its wiring is only observable through the
-# name-mangled attributes it sets.
+# Asserts on Application's internals, which have no public accessor.
 # pylint: disable=protected-access
 # pyright: reportAttributeAccessIssue=false
 
