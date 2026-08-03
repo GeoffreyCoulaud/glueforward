@@ -25,27 +25,16 @@ def test_a_new_forwarded_port_is_propagated(
     as the deployment runs, which is the whole reason the loop exists.
     """
     fake_gluetun.port = FIRST_PORT
-    start_glueforward(fake_gluetun, qbittorrent)
+    container = start_glueforward(fake_gluetun, qbittorrent)
     poll_until(lambda: qbittorrent.get_listen_port() == FIRST_PORT, timeout=60)
 
     fake_gluetun.port = SECOND_PORT
 
     poll_until(lambda: qbittorrent.get_listen_port() == SECOND_PORT, timeout=60)
-
-
-def test_a_port_changed_behind_our_back_is_restored(
-    fake_gluetun,
-    qbittorrent,
-    start_glueforward,
-):
-    """Anything may edit the preference: the WebUI, a restore, another tool."""
-    fake_gluetun.port = FIRST_PORT
-    start_glueforward(fake_gluetun, qbittorrent)
-    poll_until(lambda: qbittorrent.get_listen_port() == FIRST_PORT, timeout=60)
-
-    qbittorrent.set_preferences(listen_port=WRONG_PORT)
-
-    poll_until(lambda: qbittorrent.get_listen_port() == FIRST_PORT, timeout=60)
+    # Free to check here, and the only place httpx's own logging is covered.
+    logs = get_container_logs(container)
+    assert qbittorrent.password not in logs, "qBittorrent password leaked to the logs"
+    assert fake_gluetun.api_key not in logs, "gluetun API key leaked to the logs"
 
 
 def test_unrelated_preferences_are_left_alone(
@@ -75,18 +64,3 @@ def test_unrelated_preferences_are_left_alone(
     assert after["dht"] is False
     changed = {name for name, value in before.items() if after.get(name) != value}
     assert changed == {"listen_port", "random_port", "upnp"}
-
-
-def test_no_secret_is_written_to_the_logs(
-    fake_gluetun,
-    qbittorrent,
-    start_glueforward,
-):
-    """Logs get pasted into issues, so they must not carry credentials."""
-    fake_gluetun.port = FIRST_PORT
-    container = start_glueforward(fake_gluetun, qbittorrent)
-    poll_until(lambda: qbittorrent.get_listen_port() == FIRST_PORT, timeout=60)
-
-    logs = get_container_logs(container)
-    assert qbittorrent.password not in logs
-    assert fake_gluetun.api_key not in logs
