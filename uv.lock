@@ -209,6 +209,7 @@ dev = [
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "python-dotenv" },
     { name = "testcontainers" },
 ]
 
@@ -221,6 +222,7 @@ dev = [
     { name = "pyright", specifier = ">=1.1" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=6" },
+    { name = "python-dotenv", specifier = ">=1" },
     { name = "testcontainers", specifier = ">=4.15.0" },
 ]
 

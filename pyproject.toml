@@ -20,6 +20,9 @@ dev = [
     "pylint>=3.3",
     "pyright>=1.1",
     "testcontainers>=4.15.0",
+    # Imported directly by the end-to-end conftest, so declared rather than
+    # relied on as a transitive dependency of testcontainers.
+    "python-dotenv>=1",
 ]
 
 [tool.pytest.ini_options]

@@ -14,6 +14,18 @@ on:
 
 jobs:
 
+  # Lints the workflows from the pull request's head, unlike this file itself.
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Run actionlint
+        uses: docker://rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 # 1.7.7
+
   pylint:
     runs-on: ubuntu-latest
     steps:
@@ -31,10 +43,7 @@ jobs:
         run: uv sync --frozen
       - name: Run pylint on the application
         run: uv run pylint glueforward/main
-      # Deliberately a separate run: the unit tests assign name-mangled
-      # attributes, and pylint judges those names in the scope of the class
-      # that owns them, over in glueforward/main, so no annotation written in
-      # a test file can suppress the resulting invalid-name.
+      # Separate run: linted together, the tests raise an unsuppressable invalid-name.
       - name: Run pylint on the tests
         run: uv run pylint glueforward/tests
 
@@ -53,8 +62,6 @@ jobs:
           save-cache: ${{ inputs.cache-write }}
       - name: Install dependencies
         run: uv sync --frozen
-      # Covers the tests too, which need no separate run: pyright walks plain
-      # directories and reports each file on its own terms.
       - name: Run pyright
         run: uv run pyright glueforward
 
