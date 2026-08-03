@@ -1,4 +1,8 @@
-"""Unit tests for glueforward.qbittorrent."""
+"""Unit tests for glueforward.qbittorrent.
+
+The status codes these tests script are the ones qBittorrent really returns,
+pinned against a live instance by the end-to-end tests.
+"""
 
 # The authentication state under test has no public accessor.
 # pylint: disable=protected-access
@@ -8,8 +12,9 @@ import pytest
 
 from glueforward.main.qbittorrent import (
     QBittorrentAuthenticationNeeded,
+    QBittorrentBanned,
     QBittorrentClient,
-    QBittorrentForbiddenError,
+    QBittorrentInvalidCredentials,
     QBittorrentServerError,
     QBittorrentUnreachable,
 )
@@ -20,7 +25,7 @@ SET_PREFS_PATH = "/api/v2/app/setPreferences"
 
 
 def _login_ok(_: httpx.Request) -> httpx.Response:
-    return httpx.Response(200, headers={"set-cookie": "SID=abc"})
+    return httpx.Response(204, headers={"set-cookie": "SID=abc"})
 
 
 def test_set_port_authenticates_then_succeeds(mock_httpx):
@@ -40,13 +45,23 @@ def test_set_port_authenticates_then_succeeds(mock_httpx):
     client.set_port(22222)
 
 
-def test_authenticate_forbidden(mock_httpx):
+def test_authenticate_invalid_credentials(mock_httpx):
     def handler(_: httpx.Request) -> httpx.Response:
-        return httpx.Response(403)
+        return httpx.Response(401)
 
     mock_httpx(handler)
     client = QBittorrentClient(url="http://qbittorrent", credentials=CREDENTIALS)
-    with pytest.raises(QBittorrentForbiddenError):
+    with pytest.raises(QBittorrentInvalidCredentials):
+        client.set_port(11111)
+
+
+def test_authenticate_banned(mock_httpx):
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, text="Your IP address has been banned")
+
+    mock_httpx(handler)
+    client = QBittorrentClient(url="http://qbittorrent", credentials=CREDENTIALS)
+    with pytest.raises(QBittorrentBanned):
         client.set_port(11111)
 
 
@@ -79,7 +94,7 @@ def test_set_port_session_expired(mock_httpx):
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == LOGIN_PATH:
             return _login_ok(request)
-        return httpx.Response(401)
+        return httpx.Response(403)
 
     mock_httpx(handler)
     client = QBittorrentClient(url="http://qbittorrent", credentials=CREDENTIALS)
