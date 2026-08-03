@@ -41,17 +41,6 @@ _TEMPORARY_PASSWORD_PATTERN = re.compile(
     r"temporary password is provided for this session:\s*(\S+)", re.IGNORECASE
 )
 
-# Runtime log lines are timestamped; the startup settings tree is not.
-_GLUETUN_LOG_LINE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T")
-
-
-def _print_gluetun_log(container) -> None:
-    """Print gluetun's runtime log; pytest only shows it when the test fails."""
-    stdout, stderr = container.get_logs()
-    lines = (stdout + b"\n" + stderr).decode(errors="replace").splitlines()
-    print("\n".join(line for line in lines if _GLUETUN_LOG_LINE_PATTERN.match(line)))
-
-
 @pytest.fixture(scope="module")
 def network():
     net = Network()
@@ -93,7 +82,10 @@ def gluetun_container(network, gluetun_api_key):
         container.start()
         yield container
     finally:
-        _print_gluetun_log(container)
+        # Only surfaces when the test fails, and is then the only account of
+        # why the tunnel never came up.
+        stdout, stderr = container.get_logs()
+        print((stdout + b"\n" + stderr).decode(errors="replace"))
         container.stop()
 
 
