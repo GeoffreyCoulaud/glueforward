@@ -6,8 +6,8 @@ name: Checks for pull requests towards main branch
 # run the contributor's code:
 #   - check gets no secrets, a read-only token and no cache writes, so an
 #     untrusted run there can do no more than burn CI minutes;
-#   - e2e-tests gets the key, and for a fork the required reviewers on the
-#     e2e-fork-approval environment are the ONLY barrier in front of it.
+#   - e2e-tests gets the key, and for anything but our own branches the required
+#     reviewers on the e2e-fork-approval environment are the ONLY barrier.
 # See CONTRIBUTING.md before approving one.
 on:
   pull_request_target:
@@ -40,8 +40,8 @@ jobs:
     with:
       ref: ${{ github.event.pull_request.head.sha }}
       # Branches pushed to this repository already imply write access, so they
-      # run unattended. Anything else waits for a maintainer to approve it.
-      environment-name: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'e2e' || 'e2e-fork-approval' }}
+      # run unattended. Forks and Dependabot wait for a maintainer to approve.
+      environment-name: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') && 'e2e' || 'e2e-fork-approval' }}
       # cache-write stays off for both jobs: under pull_request_target the
       # caches are scoped to the default branch, so no pull request may write
       # to what main later reads.
