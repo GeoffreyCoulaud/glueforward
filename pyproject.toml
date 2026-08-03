@@ -15,9 +15,9 @@ glueforward = "glueforward.main.main:main"
 # `uv sync`, so it is excluded from the Docker image via `--no-dev`.
 [dependency-groups]
 dev = [
-    "pytest>=8",
-    "pytest-cov>=6",
-    "pylint>=3.3",
+    "pytest>=9",
+    "pytest-cov>=7",
+    "pylint>=4",
     "pyright>=1.1",
     "testcontainers>=4.15.0",
     # Imported directly by the end-to-end conftest, so declared rather than
