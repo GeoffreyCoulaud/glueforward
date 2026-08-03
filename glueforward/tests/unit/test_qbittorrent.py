@@ -77,8 +77,8 @@ def test_authenticate_server_error(mock_httpx):
 
 @pytest.mark.parametrize(
     "exception",
-    [httpx.ConnectError, httpx.ReadTimeout],
-    ids=["connect_error", "read_timeout"],
+    [httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout],
+    ids=["connect_error", "read_timeout", "connect_timeout"],
 )
 def test_authenticate_unreachable(mock_httpx, exception):
     def handler(_: httpx.Request) -> httpx.Response:
@@ -118,8 +118,8 @@ def test_set_port_other_http_error_reraised(mock_httpx):
 
 @pytest.mark.parametrize(
     "exception",
-    [httpx.ConnectError, httpx.ReadTimeout],
-    ids=["connect_error", "read_timeout"],
+    [httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout],
+    ids=["connect_error", "read_timeout", "connect_timeout"],
 )
 def test_set_port_unreachable(mock_httpx, exception):
     def handler(request: httpx.Request) -> httpx.Response:

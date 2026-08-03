@@ -30,6 +30,13 @@ class GluetunServerError(RetryableError):
         super().__init__(*args, message="Internal gluetun server error")
 
 
+class GluetunNoForwardedPort(RetryableError):
+    """Exception raised when gluetun has no port forwarded yet"""
+
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args, message="Gluetun has no forwarded port yet")
+
+
 class _PortForwardedResponseModel(TypedDict):
     port: int
 
@@ -47,7 +54,7 @@ class GluetunClient:
         try:
             response = self._client.get(url="/v1/portforward")
             response.raise_for_status()
-        except (httpx.ConnectError, httpx.ReadTimeout) as exception:
+        except (httpx.ConnectError, httpx.TimeoutException) as exception:
             raise GluetunUnreachable(self._client.base_url) from exception
         except httpx.HTTPStatusError as exception:
             if exception.response.status_code == 401:
@@ -57,4 +64,7 @@ class GluetunClient:
                 exception.response.text,
             ) from exception
         data: _PortForwardedResponseModel = response.json()
-        return data["port"]
+        if (port := data["port"]) == 0:
+            # What gluetun reports until the tunnel has been given a port.
+            raise GluetunNoForwardedPort()
+        return port
