@@ -3,24 +3,41 @@
 # Asserts on Application's internals, which have no public accessor.
 # pylint: disable=protected-access
 
+import io
+import logging
 import signal
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
+import httpx
 import pytest
 
 from glueforward.main.errors import RetryableError
-from glueforward.main.gluetun import GluetunClient
+from glueforward.main.gluetun import (
+    GluetunAuthFailed,
+    GluetunClient,
+    GluetunNoForwardedPort,
+    GluetunServerError,
+)
 from glueforward.main.main import Application, ReturnCodes, handle_sigterm, main
-from glueforward.main.qbittorrent import QBittorrentClient
+from glueforward.main.qbittorrent import (
+    QBittorrentAuthenticationNeeded,
+    QBittorrentClient,
+    QBittorrentInvalidCredentials,
+    QBittorrentUnreachable,
+)
+
+# Distinctive enough to be searched for in the logs.
+GLUETUN_API_KEY = "gluetun-api-key-3f9a2c"
+QBITTORRENT_PASSWORD = "qbittorrent-password-7d1e04"
 
 # Full, valid environment for building an Application.
 VALID_ENV = {
     "GLUETUN_URL": "http://gluetun",
-    "GLUETUN_API_KEY": "key",
+    "GLUETUN_API_KEY": GLUETUN_API_KEY,
     "SERVICE_TYPE": "qbittorrent",
     "QBITTORRENT_URL": "http://qbittorrent",
     "QBITTORRENT_USERNAME": "user",
-    "QBITTORRENT_PASSWORD": "pass",
+    "QBITTORRENT_PASSWORD": QBITTORRENT_PASSWORD,
 }
 
 
@@ -76,7 +93,8 @@ def test_init_unknown_service_type_exits(monkeypatch):
     assert exc.value.code == ReturnCodes.UNKNOWN_SERVICE_TYPE
 
 
-def test_loop_sets_port_from_gluetun(monkeypatch):
+def test_every_tick_writes_the_port_again(monkeypatch):
+    """Nothing is remembered between ticks: anything may have edited it since."""
     _set_valid_env(monkeypatch)
     app = Application()
     gluetun = MagicMock()
@@ -86,15 +104,17 @@ def test_loop_sets_port_from_gluetun(monkeypatch):
     app._service_client = service
 
     app._loop()
+    app._loop()
 
-    service.set_port.assert_called_once_with(4242)
+    assert service.set_port.call_args_list == [call(4242), call(4242)]
 
 
 def test_run_handles_lifecycle_branches(monkeypatch):
     _set_valid_env(monkeypatch)
     app = Application()
-    app._retry_interval = 0
-    app._success_interval = 0
+    # Distinct values, so the two intervals cannot be swapped unnoticed.
+    app._retry_interval = 7
+    app._success_interval = 11
     monkeypatch.setattr(
         Application,
         "_loop",
@@ -114,8 +134,100 @@ def test_run_handles_lifecycle_branches(monkeypatch):
         app.run()
 
     assert exc.value.code == ReturnCodes.UNRETRYABLE_EXCEPTION_IN_LIFECYCLE
-    # No sleep on immediate retry; sleep on delayed retry and on success.
-    assert sleep.call_count == 2
+    # No sleep on immediate retry, then each outcome waits out its own interval.
+    assert sleep.call_args_list == [call(7), call(11)]
+
+
+def _patch_loop(monkeypatch, side_effect: list) -> MagicMock:
+    """Drive run() through the given outcomes, and return the patched loop."""
+    loop = MagicMock(side_effect=side_effect)
+    monkeypatch.setattr(Application, "_loop", loop)
+    monkeypatch.setattr("glueforward.main.main.sleep", MagicMock())
+    return loop
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        GluetunServerError,
+        GluetunNoForwardedPort,
+        QBittorrentUnreachable,
+        QBittorrentAuthenticationNeeded,
+    ],
+    ids=["gluetun_outage", "no_forwarded_port", "qbittorrent_down", "session_expired"],
+)
+def test_run_survives_a_service_being_away(monkeypatch, error):
+    """Each of these is routine: tunnels renegotiate, sessions expire, stacks restart."""
+    _set_valid_env(monkeypatch)
+    app = Application()
+    loop = _patch_loop(
+        monkeypatch, [error(), error(), None, ValueError("end of the test")]
+    )
+
+    with pytest.raises(SystemExit):
+        app.run()
+
+    # Two failures, a recovery, and only then the exception ending the test.
+    assert loop.call_count == 4
+
+
+@pytest.mark.parametrize(
+    "error",
+    [GluetunAuthFailed, QBittorrentInvalidCredentials],
+    ids=["bad_api_key", "bad_credentials"],
+)
+def test_run_shuts_down_on_a_misconfiguration_without_retrying(monkeypatch, error):
+    """Retrying cannot fix a wrong secret, and gets us banned by qBittorrent."""
+    _set_valid_env(monkeypatch)
+    app = Application()
+    loop = _patch_loop(monkeypatch, [error()])
+
+    with pytest.raises(SystemExit) as exc:
+        app.run()
+
+    assert exc.value.code == ReturnCodes.UNRETRYABLE_EXCEPTION_IN_LIFECYCLE
+    assert loop.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "log_level, httpx_level",
+    [("INFO", "WARNING"), ("DEBUG", "DEBUG")],
+)
+def test_httpx_is_silenced_unless_debugging(monkeypatch, log_level, httpx_level):
+    """httpx logs a line per request, drowning out everything worth reading."""
+    _set_valid_env(monkeypatch)
+    monkeypatch.setenv("LOG_LEVEL", log_level)
+
+    Application()
+
+    levels = logging.getLevelNamesMapping()
+    assert logging.getLogger("httpx").getEffectiveLevel() == levels[httpx_level]
+    assert logging.getLogger().getEffectiveLevel() == levels[log_level]
+
+
+def test_a_successful_cycle_logs_no_secret(monkeypatch, mock_httpx):
+    """Logs get pasted into issues, so they must not carry credentials."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/portforward":
+            return httpx.Response(200, json={"port": 4242})
+        return httpx.Response(200, headers={"set-cookie": "SID=abc"})
+
+    _set_valid_env(monkeypatch)
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    mock_httpx(handler)
+    app = Application()
+    # dictConfig drops the root handlers caplog installs, so capture our own.
+    logs = io.StringIO()
+    capture = logging.StreamHandler(logs)
+    logging.getLogger().addHandler(capture)
+    try:
+        app._loop()
+    finally:
+        logging.getLogger().removeHandler(capture)
+
+    assert GLUETUN_API_KEY not in logs.getvalue()
+    assert QBITTORRENT_PASSWORD not in logs.getvalue()
 
 
 def test_main_runs_application(monkeypatch):
