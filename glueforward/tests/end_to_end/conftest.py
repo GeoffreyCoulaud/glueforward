@@ -161,24 +161,6 @@ class QBittorrent:
     def url_for_containers(self) -> str:
         return f"http://{QBITTORRENT_ALIAS}:{QBITTORRENT_WEBUI_PORT}"
 
-    def stop(self) -> None:
-        self.container.get_wrapped_container().stop()
-
-    def start(self) -> None:
-        """Start the container again, and wait for the WebUI to answer."""
-        self.container.get_wrapped_container().start()
-        # Docker hands out a new host port on every restart. Containers reach
-        # qBittorrent by network alias, so only this external client cares.
-        self.client.base_url = _get_qbittorrent_base_url(self.container)
-        poll_until(self._get_can_authenticate, timeout=120)
-
-    def _get_can_authenticate(self) -> bool:
-        try:
-            self.authenticate()
-        except httpx.HTTPError:
-            return False
-        return True
-
     def authenticate(self) -> None:
         response = self.client.post(
             "/api/v2/auth/login",
@@ -249,23 +231,10 @@ def _start_qbittorrent(network: Network) -> QBittorrent:
 
 
 @pytest.fixture
-def start_qbittorrent(network: Network) -> Iterator[Callable[[], QBittorrent]]:
-    """Start a qBittorrent on demand, for tests that control their own timing."""
-    started: list[QBittorrent] = []
-
-    def start() -> QBittorrent:
-        service = _start_qbittorrent(network)
-        started.append(service)
-        return service
-
-    yield start
-    for service in started:
-        service.close()
-
-
-@pytest.fixture
-def qbittorrent(start_qbittorrent: Callable[[], QBittorrent]) -> QBittorrent:
-    return start_qbittorrent()
+def qbittorrent(network: Network) -> Iterator[QBittorrent]:
+    service = _start_qbittorrent(network)
+    yield service
+    service.close()
 
 
 @pytest.fixture
