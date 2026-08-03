@@ -1,5 +1,6 @@
 import logging
 import logging.config as logging_config
+import signal
 import sys
 from enum import IntEnum
 from os import getenv
@@ -113,6 +114,17 @@ class Application:
                 sleep(self._success_interval)
 
 
+def handle_sigterm(*_: object) -> None:
+    """Shut down on SIGTERM, the signal a container is stopped with.
+
+    Without a handler the kernel never delivers it to PID 1, so `docker stop`
+    waits out its whole timeout before resorting to SIGKILL.
+    """
+    logging.info("Received SIGTERM, shutting down")
+    sys.exit(0)
+
+
 def main() -> None:
     """Run the application."""
+    signal.signal(signal.SIGTERM, handle_sigterm)
     Application().run()
