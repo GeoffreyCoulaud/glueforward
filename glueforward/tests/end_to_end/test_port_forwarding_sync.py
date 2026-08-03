@@ -1,16 +1,24 @@
-"""Real end-to-end test.
+"""End-to-end tests against a real ProtonVPN tunnel.
 
-Starts a real gluetun connected to a real ProtonVPN account (WireGuard, port
-forwarding enabled) and a real qBittorrent, runs glueforward built from the
-repository's Dockerfile, and asserts purely from the outside, through
-gluetun's and qBittorrent's own public APIs, that qBittorrent's listening
-port ends up matching the port gluetun obtained from ProtonVPN.
+These are the only tests that pin glueforward against gluetun's real port
+forwarding: a real gluetun connected to a real ProtonVPN account (WireGuard,
+port forwarding enabled), a real qBittorrent, and glueforward built from the
+repository's Dockerfile. Everything else is asserted from the outside,
+through gluetun's and qBittorrent's own public APIs.
+
+A single WireGuard key means a single VPN session, so these tests cannot run
+concurrently with one another.
 """
 
 import os
-import time
 
 import pytest
+
+from .conftest import poll_until
+
+UNUSED_PORT = 1234
+
+pytestmark = pytest.mark.vpn
 
 if not os.environ.get("WIREGUARD_PRIVATE_KEY"):
     pytest.skip(
@@ -21,41 +29,38 @@ if not os.environ.get("WIREGUARD_PRIVATE_KEY"):
     )
 
 
-def _poll_until(predicate, *, timeout: float, interval: float = 2.0):
-    """Call `predicate` until it returns a truthy value, or raise TimeoutError."""
-    deadline = time.monotonic() + timeout
-    last_error = None
-    while time.monotonic() < deadline:
-        try:
-            result = predicate()
-        except Exception as error:  # pylint: disable=broad-exception-caught
-            last_error = error
-        else:
-            if result:
-                return result
-            last_error = None
-        time.sleep(interval)
-    raise TimeoutError(f"Condition not met within {timeout}s") from last_error
-
-
 def test_glueforward_syncs_qbittorrent_port_to_gluetun_forwarded_port(
-    gluetun_client,
-    qbittorrent_client,
-    # Requested so it is running: this is the application under test.
-    glueforward_container,  # pylint: disable=unused-argument
+    gluetun_with_vpn,
+    qbittorrent,
+    start_glueforward,
 ):
-    def get_forwarded_port():
-        response = gluetun_client.get("/v1/portforward")
-        response.raise_for_status()
-        return response.json()["port"] or None
+    forwarded_port = gluetun_with_vpn.wait_for_forwarded_port()
+    # A known starting value, so reaching the forwarded port cannot be a fluke.
+    qbittorrent.set_preferences(listen_port=UNUSED_PORT)
+    assert forwarded_port != UNUSED_PORT
 
-    # Nothing before this waits for the tunnel, so this waits out gluetun's
-    # whole startup, retried server negotiation included.
-    forwarded_port = _poll_until(get_forwarded_port, timeout=240)
+    start_glueforward(gluetun_with_vpn, qbittorrent)
 
-    def get_configured_listen_port():
-        response = qbittorrent_client.get("/api/v2/app/preferences")
-        response.raise_for_status()
-        return response.json()["listen_port"] == forwarded_port
+    poll_until(lambda: qbittorrent.get_listen_port() == forwarded_port, timeout=120)
 
-    _poll_until(get_configured_listen_port, timeout=120)
+
+def test_qbittorrent_follows_a_renegotiated_tunnel(
+    gluetun_with_vpn,
+    qbittorrent,
+    start_glueforward,
+):
+    """A tunnel does not last forever, and each new one forwards its own port."""
+    gluetun_with_vpn.wait_for_forwarded_port()
+    start_glueforward(gluetun_with_vpn, qbittorrent)
+    poll_until(
+        lambda: qbittorrent.get_listen_port() == gluetun_with_vpn.get_forwarded_port(),
+        timeout=120,
+    )
+
+    gluetun_with_vpn.reconnect()
+    # ProtonVPN may well hand out the same port again, so this asserts that the
+    # port is written afresh rather than that it changed.
+    qbittorrent.set_preferences(listen_port=UNUSED_PORT)
+    forwarded_port = gluetun_with_vpn.wait_for_forwarded_port()
+
+    poll_until(lambda: qbittorrent.get_listen_port() == forwarded_port, timeout=120)
