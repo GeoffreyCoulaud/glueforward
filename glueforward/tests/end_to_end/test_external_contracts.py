@@ -38,14 +38,23 @@ def test_invalid_qbittorrent_credentials_shut_the_application_down(
     assert logs.count("Authenticating to qBittorrent") == 1
 
 
+def test_gluetun_reports_port_zero_until_it_forwards_one(gluetun_without_vpn):
+    """glueforward waits on this 0, which is worth hearing from gluetun itself.
+
+    A tunnel takes long enough to negotiate that every deployment starts here.
+    """
+    assert gluetun_without_vpn.get_forwarded_port() == 0
+
+
 def test_invalid_gluetun_api_key_shuts_the_application_down(
     gluetun_without_vpn,
-    qbittorrent,
     start_glueforward,
 ):
     container = start_glueforward(
         gluetun_without_vpn,
-        qbittorrent,
+        # No qBittorrent: gluetun is called first, and never gets past its key.
+        QBITTORRENT_URL="http://qbittorrent:8080",
+        QBITTORRENT_PASSWORD="unused",
         GLUETUN_API_KEY="not-the-api-key",
     )
 

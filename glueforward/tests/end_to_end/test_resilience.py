@@ -7,10 +7,61 @@ its behaviour is what is under test.
 No VPN tunnel is needed, so these run without any secret.
 """
 
-from .conftest import get_is_running, poll_until
+import time
+
+from .conftest import get_container_logs, get_is_running, poll_until
 
 FIRST_PORT = 51413
 SECOND_PORT = 6881
+
+# Generous enough that a container waiting it out is unambiguously stuck.
+STOP_TIMEOUT = 20
+
+
+def test_a_missing_forwarded_port_is_waited_out(
+    fake_gluetun,
+    qbittorrent,
+    start_glueforward,
+):
+    """gluetun reports port 0 until its tunnel has one, which takes a while.
+
+    Starting the whole stack at once is the normal case, so this is where
+    every deployment begins rather than an edge case.
+    """
+    fake_gluetun.port = 0
+    container = start_glueforward(fake_gluetun, qbittorrent)
+    requests_before = fake_gluetun.request_count
+    poll_until(lambda: fake_gluetun.request_count >= requests_before + 3, timeout=60)
+    assert get_is_running(container)
+
+    fake_gluetun.port = FIRST_PORT
+
+    poll_until(lambda: qbittorrent.get_listen_port() == FIRST_PORT, timeout=60)
+
+
+def test_sigterm_stops_glueforward_promptly(
+    fake_gluetun,
+    qbittorrent,
+    start_glueforward,
+):
+    """`docker stop` sends SIGTERM, which the kernel drops unless PID 1 handles it.
+
+    Every restart and redeploy then waits out the whole stop timeout before a
+    SIGKILL, which is what a4eea28 fixed.
+    """
+    fake_gluetun.port = FIRST_PORT
+    container = start_glueforward(fake_gluetun, qbittorrent)
+    poll_until(lambda: qbittorrent.get_listen_port() == FIRST_PORT, timeout=60)
+
+    wrapped = container.get_wrapped_container()
+    started_at = time.monotonic()
+    wrapped.stop(timeout=STOP_TIMEOUT)
+    elapsed = time.monotonic() - started_at
+
+    assert elapsed < STOP_TIMEOUT / 2, f"took {elapsed:.1f}s to stop"
+    # 137 is the SIGKILL the daemon falls back on once its timeout is up.
+    assert wrapped.wait()["StatusCode"] == 0
+    assert "Received SIGTERM" in get_container_logs(container)
 
 
 def test_expired_qbittorrent_session_is_renewed(
