@@ -154,10 +154,16 @@ def glueforward_image():
     BuildKit's cache with the Buildx-based CI build/push steps).
     """
     tag = "glueforward:e2e"
-    subprocess.run(
-        ["docker", "buildx", "build", "--load", "-t", tag, str(REPO_ROOT)],
-        check=True,
-    )
+    command = ["docker", "buildx", "build", "--load"]
+    # The GitHub Actions cache only exists inside a workflow run. Reads are
+    # always safe there; writes are opt-in because the cache is shared with
+    # the default branch, and untrusted code must never populate it.
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        command += ["--cache-from", "type=gha"]
+        if os.environ.get("E2E_CACHE_WRITE") == "true":
+            command += ["--cache-to", "type=gha,mode=max,ignore-error=true"]
+    command += ["-t", tag, str(REPO_ROOT)]
+    subprocess.run(command, check=True)
     return tag
 
 

@@ -8,5 +8,9 @@ dist/
 .mypy_cache
 .pytest_cache
 
+# Scratch workspace for agentic coding workflows (plans, ledgers, review
+# packages); never meant to be committed.
+.superpowers/
+
 # Local secrets for running end-to-end tests (see CONTRIBUTING.md); never commit this.
 .env.e2e.local
