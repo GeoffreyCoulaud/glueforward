@@ -1,11 +1,49 @@
 name: Checks for pull requests towards main branch
 
+# Runs on pull_request_target, not pull_request, because only that event gives
+# a pull request from a fork access to the real ProtonVPN key the end-to-end
+# tests need. Both jobs below check out the pull request's own head, so both
+# run the contributor's code:
+#   - check gets no secrets, a read-only token and no cache writes, so an
+#     untrusted run there can do no more than burn CI minutes;
+#   - e2e-tests gets the key, and for a fork the required reviewers on the
+#     e2e-fork-approval environment are the ONLY barrier in front of it.
+# See CONTRIBUTING.md before approving one.
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - "main"
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
 
 jobs:
 
   check:
+    permissions:
+      contents: read
     uses: ./.github/workflows/check.yml
+    with:
+      ref: ${{ github.event.pull_request.head.sha }}
+
+  e2e-tests:
+    needs: check
+    if: github.event.pull_request.draft == false
+    permissions:
+      contents: read
+    # Superseded runs of the same pull request give up the VPN key rather than
+    # sit in front of the newer commit in the queue below.
+    concurrency:
+      group: e2e-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    uses: ./.github/workflows/end-to-end-tests.yml
+    with:
+      ref: ${{ github.event.pull_request.head.sha }}
+      # Branches pushed to this repository already imply write access, so they
+      # run unattended. Anything else waits for a maintainer to approve it.
+      environment-name: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'e2e' || 'e2e-fork-approval' }}
+      # cache-write stays off for both jobs: under pull_request_target the
+      # caches are scoped to the default branch, so no pull request may write
+      # to what main later reads.
+    secrets:
+      wireguard-private-key: ${{ secrets.PROTONVPN_WIREGUARD_PRIVATE_KEY }}

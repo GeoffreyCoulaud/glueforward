@@ -16,13 +16,26 @@ env:
 jobs:
 
   check:
+    permissions:
+      contents: read
     uses: ./.github/workflows/check.yml
+    with:
+      cache-write: true
+
+  e2e-tests:
+    needs: check
+    uses: ./.github/workflows/end-to-end-tests.yml
+    with:
+      environment-name: e2e
+      cache-write: true
+    secrets:
+      wireguard-private-key: ${{ secrets.PROTONVPN_WIREGUARD_PRIVATE_KEY }}
 
   build-and-push-image:
     runs-on: ubuntu-latest
 
-    #  Ensure that the code passes checks before building and pushing the image
-    needs: check
+    #  Ensure that the code passes checks and end-to-end tests before building and pushing the image
+    needs: [check, e2e-tests]
 
     # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
     permissions:
@@ -61,26 +74,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-      # Builds the image with Buildx (loaded into the local daemon, not pushed) and
-      # runs it against a real gluetun/ProtonVPN and a real qBittorrent. Reuses this
-      # job's Buildx cache, so the final multi-arch build below only has the arm64
-      # layers left to do. Requires a real, short-lived ProtonVPN secret: never log it.
-      - name: Run end-to-end tests
-        run: uv run pytest glueforward/tests/end_to_end -o addopts=""
-        env:
-          WIREGUARD_PRIVATE_KEY: ${{ secrets.PROTONVPN_WIREGUARD_PRIVATE_KEY }}
-
-      # This step uses the `docker/build-push-action` action to build the image, based on your repository's `Dockerfile`. If the build succeeds, it pushes the image to GitHub Packages.
-      # It uses the `context` parameter to define the build's context as the set of files located in the specified path. For more information, see "[Usage](https://github.com/docker/build-push-action#usage)" in the README of the `docker/build-push-action` repository.
-      # It uses the `tags` and `labels` parameters to tag and label the image with the output from the "meta" step.
+      # Builds and pushes the multi-arch image. Reads/writes the same GitHub
+      # Actions cache the e2e-tests job populated, so only the layers that job
+      # didn't already build (arm64) need building here.
       - name: Build and push Docker image
         id: push
         uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
@@ -90,6 +86,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,ignore-error=true
 
       # This step generates an artifact attestation for the image, which is an unforgeable statement about where and how it was built. It increases supply chain security for people who consume the image. For more information, see "[AUTOTITLE](/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)."
       - name: Generate artifact attestation
@@ -99,7 +97,7 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
-  # If a tag is pushed, also create a draft release
+  # If a tag is pushed, also create a draft release
   create-draft-release:
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest

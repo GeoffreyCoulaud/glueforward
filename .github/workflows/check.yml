@@ -2,6 +2,15 @@ name: Run checks
 
 on:
   workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to check out. Defaults to whatever triggered the calling workflow."
+        type: string
+        default: ""
+      cache-write:
+        description: "Whether this run may populate the shared uv cache. Trusted callers only."
+        type: boolean
+        default: false
 
 jobs:
 
@@ -10,10 +19,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
+          save-cache: ${{ inputs.cache-write }}
       - name: Install dependencies
         run: uv sync --frozen
       - name: Run pylint
@@ -24,10 +37,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
+          save-cache: ${{ inputs.cache-write }}
       - name: Install dependencies
         run: uv sync --frozen
       - name: Run pyright
@@ -38,10 +55,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
+          save-cache: ${{ inputs.cache-write }}
       - name: Install dependencies
         run: uv sync --frozen
       - name: Run tests

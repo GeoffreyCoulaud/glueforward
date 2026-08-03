@@ -1,0 +1,65 @@
+name: Run end-to-end tests
+
+on:
+  workflow_call:
+    inputs:
+      environment-name:
+        description: "GitHub Environment gating this job. Untrusted code must get one with required reviewers."
+        type: string
+        required: true
+      ref:
+        description: "Git ref to check out. Defaults to whatever triggered the calling workflow."
+        type: string
+        default: ""
+      cache-write:
+        description: "Whether this run may populate the shared Buildx cache. Trusted callers only."
+        type: boolean
+        default: false
+    secrets:
+      wireguard-private-key:
+        required: true
+
+jobs:
+
+  e2e:
+    name: End-to-end tests
+    environment: ${{ inputs.environment-name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    # One WireGuard key means one VPN connection at a time. Every caller shares
+    # this group, and a run waits its turn instead of cancelling the holder.
+    concurrency:
+      group: protonvpn-wireguard-key
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # The tests shell out to `docker buildx build` themselves, so the cache
+      # credentials docker/build-push-action would have injected on its own
+      # have to be exported into the environment by hand.
+      - name: Expose GitHub Actions cache to Buildx
+        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # Uses a real ProtonVPN key: never log it.
+      - name: Run end-to-end tests
+        run: uv run pytest glueforward/tests/end_to_end -o addopts=""
+        env:
+          WIREGUARD_PRIVATE_KEY: ${{ secrets.wireguard-private-key }}
+          E2E_CACHE_WRITE: ${{ inputs.cache-write }}

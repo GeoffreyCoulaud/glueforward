@@ -60,6 +60,12 @@ The `-o addopts=""` resets the coverage flags from `pyproject.toml`: they target
 
 Without `WIREGUARD_PRIVATE_KEY` set, these tests are skipped automatically, and a plain `uv run pytest` never runs them (they're outside `testpaths`). Expect a real run to take a minute or two: it builds an image and negotiates a real VPN connection.
 
+## Approving end-to-end tests on a fork pull request
+
+The end-to-end tests need the real ProtonVPN key from above, so on a pull request from a fork they wait for a maintainer to approve the run (`main-pr.yml`, gated by the `e2e-fork-approval` environment). Pull requests from a branch of this repository run them unattended.
+
+That approval is the *only* barrier between the fork's code and the key. Before clicking Approve, read the whole diff rather than just the application code. The `Dockerfile`, `conftest.py`, `pyproject.toml` and `uv.lock` all run with the secret in scope too.
+
 ## Lint
 
 ```sh
