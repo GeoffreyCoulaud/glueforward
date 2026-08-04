@@ -125,8 +125,6 @@ services:
 
 ## Exit codes
 
-glueforward retries whatever a retry can fix, and stops otherwise. Its exit code says which.
-
 | Code | Meaning |
 | ---- | ------- |
 | 0 | Stopped on SIGTERM, the signal `docker stop` sends. |
@@ -135,19 +133,28 @@ glueforward retries whatever a retry can fix, and stops otherwise. Its exit code
 | 3 | An error no retry can fix: credentials gluetun or qBittorrent rejected, a URL that does not point at the expected API, or a first forwarded port that never came. |
 | 4 | An environment variable that has to be a whole number holds something else. |
 
-Any code other than 0 is a mistake in the setup, waiting for whoever runs it. Leave the glueforward container on `restart: "no"` (the default) so it stays stopped, with its last log lines saying why, rather than restarting into the same error and hammering gluetun and your service. Nothing is lost by doing so: unreachable servers, 5xx answers, expired sessions and a port that comes and goes are all retried in place, without the process ever exiting.
+Any code other than 0 is a mistake in the setup.
 
-## Migrating from v2
+ [!IMPORTANT]  
+> Leave the glueforward container on `restart: "no"` or `restart: on-failure:3`.  
+> Glueforward is built to tolerate transitive errors. Restarting-looping would hammer gluetun and the service without fixing the issue. Use `docker logs` to diagnose crashes.  
+
+## Migration : v2 -> v3
 
 Three things changed for an existing deployment.
 
-**`SERVICE_TYPE` is now required.** It used to be optional, and to default to `qbittorrent`. A container that does not set it now stops on startup with exit code 1.
+- **`SERVICE_TYPE` is now required.**  
+  It used to be optional, and to default to `qbittorrent`. A container that does not set it now stops on startup with exit code 1.
 
-**The wait for a first forwarded port is now bounded.** When gluetun still reports no forwarded port `GLUETUN_PORT_WAIT_DURATION` seconds (300 by default) after startup, glueforward stops with exit code 3 instead of retrying forever. This surfaces a VPN that is never going to forward a port, typically one running without `VPN_PORT_FORWARDING`, or on a provider or server that does not support it. Raise `GLUETUN_PORT_WAIT_DURATION` if your tunnel legitimately takes longer to negotiate its first port. Once a first port has arrived, later disappearances are retried indefinitely, as before.
+- **The wait for a first forwarded port is now bounded.**  
+  When gluetun still reports no forwarded port `GLUETUN_PORT_WAIT_DURATION` seconds (300 by default) after startup, glueforward stops instead of retrying forever. This surfaces a VPN that is never going to forward a port, typically running without `VPN_PORT_FORWARDING`, or on a provider or server that does not support it. Raise `GLUETUN_PORT_WAIT_DURATION` if your tunnel legitimately takes longer to negotiate its first port. Once a first port has arrived, later disappearances are retried indefinitely, as before.
 
-**`GLUETUN_API_KEY` is now optional.** Leave it unset when gluetun's control server is set up for unauthenticated access. There is nothing to do if you already set it.
+- **`GLUETUN_API_KEY` is now optional.**  
+  Leave it unset when gluetun's control server is set up for unauthenticated access. There is nothing to do if you already set it.
 
-Coming from v1 with slskd? Support for it was removed in v2.0.0, since slskd forwards ports natively as of its v0.24.4. Configure it through [slskd's own VPN integration](https://github.com/slskd/slskd/blob/master/docs/config.md#vpn), and drop the glueforward container.
+### Coming from v1 with slskd? 
+
+Support for it was removed in v2.0.0, since slskd forwards ports natively as of its v0.24.4. Configure it through [slskd's own VPN integration](https://github.com/slskd/slskd/blob/master/docs/config.md#vpn), and drop the glueforward container.
 
 ## Other info
 
