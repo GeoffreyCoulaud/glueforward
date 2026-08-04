@@ -139,7 +139,7 @@ Any code other than 0 is a mistake in the setup.
 > Leave the glueforward container on `restart: "no"` or `restart: on-failure:3`.  
 > Glueforward is built to tolerate transitive errors. Restarting-looping would hammer gluetun and the service without fixing the issue. Use `docker logs` to diagnose crashes.  
 
-## Migration : v2 -> v3
+## Migration : v2.0 -> v2.1
 
 Two things changed for an existing deployment.
 

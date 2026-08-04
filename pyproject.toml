@@ -1,6 +1,6 @@
 [project]
 name = "glueforward"
-version = "3.0.0"
+version = "2.1.0"
 description = "Update listening ports to match gluetun's forwarded port on the VPN side"
 readme = "README.md"
 requires-python = ">=3.12"
