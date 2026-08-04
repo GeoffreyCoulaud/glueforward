@@ -139,17 +139,7 @@ Any code other than 0 is a mistake in the setup.
 > Leave the glueforward container on `restart: "no"` or `restart: on-failure:3`.  
 > Glueforward is built to tolerate transitive errors. Restarting-looping would hammer gluetun and the service without fixing the issue. Use `docker logs` to diagnose crashes.  
 
-## Migration : v2.0 -> v2.1
-
-Two things changed for an existing deployment.
-
-- **The wait for a first forwarded port is now bounded.**  
-  When gluetun still reports no forwarded port `GLUETUN_PORT_WAIT_DURATION` seconds (300 by default) after startup, glueforward stops instead of retrying forever. This surfaces a VPN that is never going to forward a port, typically running without `VPN_PORT_FORWARDING`, or on a provider or server that does not support it. Raise `GLUETUN_PORT_WAIT_DURATION` if your tunnel legitimately takes longer to negotiate its first port. Once a first port has arrived, later disappearances are retried indefinitely, as before.
-
-- **`GLUETUN_API_KEY` is now optional.**  
-  Leave it unset when gluetun's control server is set up for unauthenticated access. There is nothing to do if you already set it.
-
-### Coming from v1 with slskd? 
+## Coming from v1 with slskd?
 
 Support for it was removed in v2.0.0, since slskd forwards ports natively as of its v0.24.4. Configure it through [slskd's own VPN integration](https://github.com/slskd/slskd/blob/master/docs/config.md#vpn), and drop the glueforward container.
 
