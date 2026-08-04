@@ -22,7 +22,7 @@ class Application:
 
     def __init__(self) -> None:
         self._configure_logging()
-        self._retry_interval = self._integer_getenv("RETRY_INTERVAL", default=10)
+        self._retry_interval = self._integer_getenv("RETRY_INTERVAL", 10)
         self._success_interval = self._integer_getenv("SUCCESS_INTERVAL", 60 * 5)
         self._gluetun = GluetunClient(
             url=self._required_getenv("GLUETUN_URL"),
