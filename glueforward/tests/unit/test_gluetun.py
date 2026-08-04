@@ -1,10 +1,13 @@
 """Unit tests for glueforward.gluetun."""
 
+import logging
+
 import httpx
 import pytest
 
 from glueforward.main.errors import RetryableError
 from glueforward.main.gluetun import (
+    MISSING_PORT_WARNING_INTERVAL,
     GluetunAuthFailed,
     GluetunClient,
     GluetunNoForwardedPort,
@@ -80,6 +83,66 @@ def test_get_forwarded_port_not_forwarded_yet(mock_httpx):
     client = GluetunClient(url="http://gluetun", api_key=None)
     with pytest.raises(GluetunNoForwardedPort):
         client.get_forwarded_port()
+
+
+def test_a_port_that_never_comes_is_eventually_warned_about(
+    mock_httpx, monkeypatch, caplog
+):
+    """VPN_PORT_FORWARDING left off is otherwise silent: gluetun reports the
+    same 0 as a tunnel that is still negotiating one."""
+    port = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"port": port})
+
+    clock = 0.0
+    monkeypatch.setattr("glueforward.main.gluetun.monotonic", lambda: clock)
+    mock_httpx(handler)
+    client = GluetunClient(url="http://gluetun", api_key=None)
+
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            with pytest.raises(GluetunNoForwardedPort):
+                client.get_forwarded_port()
+        assert not caplog.records, "warned before a tunnel could have negotiated"
+
+        clock = MISSING_PORT_WARNING_INTERVAL + 1
+        with pytest.raises(GluetunNoForwardedPort):
+            client.get_forwarded_port()
+        assert len(caplog.records) == 1
+        assert "VPN_PORT_FORWARDING" in caplog.text
+
+        # Repeats rather than warning once, since the fix is out of our hands.
+        clock += MISSING_PORT_WARNING_INTERVAL + 1
+        with pytest.raises(GluetunNoForwardedPort):
+            client.get_forwarded_port()
+        assert len(caplog.records) == 2
+
+
+def test_a_forwarded_port_clears_the_warning(mock_httpx, monkeypatch, caplog):
+    """A tunnel that took its time is not worth warning about afterwards."""
+    port = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"port": port})
+
+    clock = 0.0
+    monkeypatch.setattr("glueforward.main.gluetun.monotonic", lambda: clock)
+    mock_httpx(handler)
+    client = GluetunClient(url="http://gluetun", api_key=None)
+
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(GluetunNoForwardedPort):
+            client.get_forwarded_port()
+        port = 51413
+        assert client.get_forwarded_port() == 51413
+
+        port = 0
+        clock = MISSING_PORT_WARNING_INTERVAL + 1
+        with pytest.raises(GluetunNoForwardedPort):
+            client.get_forwarded_port()
+
+        assert not caplog.records
 
 
 @pytest.mark.parametrize(
