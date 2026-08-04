@@ -47,6 +47,8 @@ They come in two families:
 - Most of them need no VPN tunnel, and therefore no secret. gluetun's control server is stood in for by a small HTTP server the test drives, which is the only way to choose a forwarded port and change it on command. Run them with `-m "not vpn"`.
 - A few pin glueforward against gluetun's real port forwarding, and need a real ProtonVPN connection. They are marked `vpn`.
 
+Within the first family, `test_contracts_gluetun.py` and `test_contracts_qbittorrent.py` stand apart: they never start glueforward at all. Each one asserts a single fact about gluetun or qBittorrent that a branch in the clients keys off, and the values they check live in `glueforward/tests/external_contracts.py`, shared with the unit tests that script them. When one of those services changes its behaviour, what fails is the contract test naming the fact, rather than something in the middle of a longer run.
+
 The `vpn` ones require:
 
 - Docker, with access to `/dev/net/tun` (the default on Linux hosts)

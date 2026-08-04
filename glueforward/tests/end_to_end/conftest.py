@@ -39,6 +39,18 @@ from testcontainers.core.container import DockerContainer
 from testcontainers.core.network import Network
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
+from ..external_contracts import (
+    GLUETUN_API_KEY_HEADER,
+    GLUETUN_INVALID_API_KEY_STATUS,
+    GLUETUN_NO_FORWARDED_PORT,
+    GLUETUN_PORT_FORWARD_PATH,
+    GLUETUN_PORT_KEY,
+    QBITTORRENT_EXPIRED_SESSION_STATUS,
+    QBITTORRENT_LOGIN_PATH,
+    QBITTORRENT_PREFERENCES_PATH,
+    QBITTORRENT_SET_PREFERENCES_PATH,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(REPO_ROOT / ".env.e2e.local")
 
@@ -48,6 +60,11 @@ QBITTORRENT_WEBUI_PORT = 8080
 QBITTORRENT_ALIAS = "qbittorrent"
 QBITTORRENT_USERNAME = "admin"
 GLUEFORWARD_IMAGE_TAG = "glueforward:e2e"
+
+# The intervals glueforward is started with here, short enough for a test
+# to watch several ticks go by.
+GLUEFORWARD_RETRY_INTERVAL = 2
+GLUEFORWARD_SUCCESS_INTERVAL = 5
 
 # Docker's alias for the host, so containers can reach servers pytest runs.
 HOST_ALIAS = "host.docker.internal"
@@ -141,12 +158,19 @@ def glueforward_image(tmp_path_factory: pytest.TempPathFactory, worker_id: str) 
     return GLUEFORWARD_IMAGE_TAG
 
 
+def _remove_network(net: Network) -> bool:
+    net.remove()
+    return True
+
+
 @pytest.fixture
 def network() -> Iterator[Network]:
     net = Network()
     net.create()
     yield net
-    net.remove()
+    # A container's endpoint outlives the container itself by a moment, and the
+    # daemon refuses to remove a network still holding one.
+    poll_until(lambda: _remove_network(net), timeout=30, interval=1)
 
 
 @dataclass
@@ -163,7 +187,7 @@ class QBittorrent:
 
     def authenticate(self) -> None:
         response = self.client.post(
-            "/api/v2/auth/login",
+            QBITTORRENT_LOGIN_PATH,
             data={"username": QBITTORRENT_USERNAME, "password": self.password},
         )
         response.raise_for_status()
@@ -172,19 +196,19 @@ class QBittorrent:
     def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         """Send a request, reauthenticating once if the test's session expired."""
         response = self.client.request(method, url, **kwargs)
-        if response.status_code == 403:
+        if response.status_code == QBITTORRENT_EXPIRED_SESSION_STATUS:
             self.authenticate()
             response = self.client.request(method, url, **kwargs)
         response.raise_for_status()
         return response
 
     def get_preferences(self) -> dict:
-        return self._request("GET", "/api/v2/app/preferences").json()
+        return self._request("GET", QBITTORRENT_PREFERENCES_PATH).json()
 
     def set_preferences(self, **preferences: Any) -> None:
         self._request(
             "POST",
-            "/api/v2/app/setPreferences",
+            QBITTORRENT_SET_PREFERENCES_PATH,
             data={"json": json.dumps(preferences)},
         )
 
@@ -203,6 +227,18 @@ def _get_qbittorrent_base_url(container: DockerContainer) -> str:
     )
 
 
+def _make_qbittorrent_client(container: DockerContainer) -> httpx.Client:
+    return httpx.Client(
+        base_url=_get_qbittorrent_base_url(container),
+        # testcontainers maps the WebUI to a random host port, but qBittorrent
+        # validates the Host header's port against its own configured WebUI
+        # port (8080) and rejects everything else. Container-to-container
+        # traffic (glueforward -> qbittorrent:8080) is unaffected, only this
+        # external, host-mapped-port client needs the override.
+        headers={"Host": f"localhost:{QBITTORRENT_WEBUI_PORT}"},
+    )
+
+
 def _start_qbittorrent(network: Network) -> QBittorrent:
     container = (
         DockerContainer("linuxserver/qbittorrent:latest")
@@ -216,15 +252,7 @@ def _start_qbittorrent(network: Network) -> QBittorrent:
     container.start()
     match = _TEMPORARY_PASSWORD_PATTERN.search(get_container_logs(container))
     assert match, "qBittorrent did not print its temporary WebUI password to the logs"
-    client = httpx.Client(
-        base_url=_get_qbittorrent_base_url(container),
-        # testcontainers maps the WebUI to a random host port, but qBittorrent
-        # validates the Host header's port against its own configured WebUI
-        # port (8080) and rejects everything else. Container-to-container
-        # traffic (glueforward -> qbittorrent:8080) is unaffected, only this
-        # external, host-mapped-port client needs the override.
-        headers={"Host": f"localhost:{QBITTORRENT_WEBUI_PORT}"},
-    )
+    client = _make_qbittorrent_client(container)
     service = QBittorrent(container=container, client=client, password=match.group(1))
     service.authenticate()
     return service
@@ -235,6 +263,17 @@ def qbittorrent(network: Network) -> Iterator[QBittorrent]:
     service = _start_qbittorrent(network)
     yield service
     service.close()
+
+
+@pytest.fixture
+def qbittorrent_stranger(qbittorrent: QBittorrent) -> Iterator[httpx.Client]:
+    """A client of the same qBittorrent, with no session of its own.
+
+    For the contract tests that drive authentication themselves, and must be
+    free to fail at it without costing the fixture its own session.
+    """
+    with _make_qbittorrent_client(qbittorrent.container) as client:
+        yield client
 
 
 @pytest.fixture
@@ -278,14 +317,18 @@ class FakeGluetun:
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # pylint: disable=invalid-name
                 fake.request_count += 1
-                if self.headers.get("X-API-Key") != fake.api_key:
-                    _write_response(self, 401, b"Unauthorized\n")
-                elif self.path != "/v1/portforward":
+                if self.headers.get(GLUETUN_API_KEY_HEADER) != fake.api_key:
+                    _write_response(
+                        self, GLUETUN_INVALID_API_KEY_STATUS, b"Unauthorized\n"
+                    )
+                elif self.path != GLUETUN_PORT_FORWARD_PATH:
                     _write_response(self, 404, b"Not found\n")
                 elif fake.status_code != 200:
                     _write_response(self, fake.status_code, b"Internal Server Error\n")
                 else:
-                    body = json.dumps({"port": fake.port, "ports": [fake.port]}).encode()
+                    body = json.dumps(
+                        {GLUETUN_PORT_KEY: fake.port, "ports": [fake.port]}
+                    ).encode()
                     _write_response(self, 200, body)
 
             # pylint: disable-next=redefined-builtin
@@ -316,16 +359,16 @@ class Gluetun:
 
     container: DockerContainer
     client: httpx.Client
-    api_key: str
+    api_key: str | None
 
     @property
     def url_for_containers(self) -> str:
         return f"http://{GLUETUN_ALIAS}:{GLUETUN_CONTROL_PORT}"
 
     def get_forwarded_port(self) -> int:
-        response = self.client.get("/v1/portforward")
+        response = self.client.get(GLUETUN_PORT_FORWARD_PATH)
         response.raise_for_status()
-        return response.json()["port"]
+        return response.json()[GLUETUN_PORT_KEY]
 
     def wait_for_forwarded_port(self, *, timeout: float = 240) -> int:
         """Wait out the whole tunnel setup, retried server negotiation included."""
@@ -342,7 +385,11 @@ class Gluetun:
         self._set_status("stopped")
         # Waiting for the port to be dropped, so the caller cannot read the old
         # one back and believe the new tunnel is already up.
-        poll_until(lambda: self.get_forwarded_port() == 0, timeout=60, interval=1)
+        poll_until(
+            lambda: self.get_forwarded_port() == GLUETUN_NO_FORWARDED_PORT,
+            timeout=60,
+            interval=1,
+        )
         self._set_status("running")
 
     def close(self) -> None:
@@ -350,7 +397,12 @@ class Gluetun:
         self.container.stop()
 
 
-def _start_gluetun(network: Network, api_key: str, wireguard_private_key: str) -> Gluetun:
+def _start_gluetun(
+    network: Network,
+    api_key: str | None,
+    wireguard_private_key: str,
+    port_forwarding: bool = True,
+) -> Gluetun:
     container = (
         DockerContainer("qmcgaw/gluetun:latest")
         .with_network(network)
@@ -361,12 +413,19 @@ def _start_gluetun(network: Network, api_key: str, wireguard_private_key: str) -
         .with_env("VPN_TYPE", "wireguard")
         .with_env("WIREGUARD_PRIVATE_KEY", wireguard_private_key)
         .with_env("SERVER_COUNTRIES", os.environ.get("SERVER_COUNTRIES", "Netherlands"))
-        .with_env("VPN_PORT_FORWARDING", "on")
-        .with_env("PORT_FORWARD_ONLY", "on")
-        .with_env(
-            "HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE",
-            json.dumps({"auth": "apikey", "apikey": api_key}),
-        )
+        .with_env("VPN_PORT_FORWARDING", "on" if port_forwarding else "off")
+    )
+    if port_forwarding:
+        container.with_env("PORT_FORWARD_ONLY", "on")
+    # Every route is private by default, so an open control server is a setting
+    # of its own rather than the absence of one.
+    container.with_env(
+        "HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE",
+        json.dumps(
+            {"auth": "none"}
+            if api_key is None
+            else {"auth": "apikey", "apikey": api_key}
+        ),
     )
     container.start()
     client = httpx.Client(
@@ -374,24 +433,63 @@ def _start_gluetun(network: Network, api_key: str, wireguard_private_key: str) -
             f"http://{container.get_container_host_ip()}:"
             f"{container.get_exposed_port(GLUETUN_CONTROL_PORT)}"
         ),
-        headers={"X-API-Key": api_key},
+        headers={} if api_key is None else {GLUETUN_API_KEY_HEADER: api_key},
     )
     # Docker publishes the port before gluetun listens on it, so waiting on the
     # port alone returns while the control server still resets connections.
-    poll_until(lambda: client.get("/v1/portforward").status_code == 200, timeout=60)
+    # Any answer will do here: which one it is, is what the contract tests are for.
+    poll_until(
+        lambda: client.get(GLUETUN_PORT_FORWARD_PATH).status_code > 0, timeout=60
+    )
     return Gluetun(container=container, client=client, api_key=api_key)
+
+
+def _get_meaningless_wireguard_key() -> str:
+    """A well-formed key no ProtonVPN session can ever be established with."""
+    return base64.b64encode(secrets.token_bytes(32)).decode()
 
 
 @pytest.fixture
 def gluetun_without_vpn(network: Network, gluetun_api_key: str) -> Iterator[Gluetun]:
     """A real gluetun whose tunnel never comes up, for testing its control server.
 
-    The private key is well-formed but meaningless, so no ProtonVPN session is
-    ever established and the fixture needs no secret. The forwarded port stays
-    at 0 throughout.
+    No ProtonVPN session is ever established, so the fixture needs no secret
+    and the forwarded port stays at 0 throughout.
     """
-    key = base64.b64encode(secrets.token_bytes(32)).decode()
-    service = _start_gluetun(network, gluetun_api_key, key)
+    service = _start_gluetun(
+        network, gluetun_api_key, _get_meaningless_wireguard_key()
+    )
+    yield service
+    service.close()
+
+
+@pytest.fixture
+def gluetun_without_authentication(network: Network) -> Iterator[Gluetun]:
+    """A real gluetun whose control server is set up to ask for nothing.
+
+    GLUETUN_API_KEY is documented as optional for exactly this setup, which
+    gluetun calls the "none" authentication method.
+    """
+    service = _start_gluetun(network, None, _get_meaningless_wireguard_key())
+    yield service
+    service.close()
+
+
+@pytest.fixture
+def gluetun_without_port_forwarding(
+    network: Network, gluetun_api_key: str
+) -> Iterator[Gluetun]:
+    """A real gluetun asked for no port forwarding at all.
+
+    The misconfiguration GLUETUN_PORT_WAIT_DURATION exists to diagnose, and
+    which is only diagnosable if gluetun answers rather than errors.
+    """
+    service = _start_gluetun(
+        network,
+        gluetun_api_key,
+        _get_meaningless_wireguard_key(),
+        port_forwarding=False,
+    )
     yield service
     service.close()
 
@@ -441,13 +539,14 @@ def start_glueforward(
         environment: dict[str, Any] = {
             "SERVICE_TYPE": "qbittorrent",
             "QBITTORRENT_USERNAME": QBITTORRENT_USERNAME,
-            "RETRY_INTERVAL": "2",
-            "SUCCESS_INTERVAL": "5",
+            "RETRY_INTERVAL": str(GLUEFORWARD_RETRY_INTERVAL),
+            "SUCCESS_INTERVAL": str(GLUEFORWARD_SUCCESS_INTERVAL),
             "LOG_LEVEL": "DEBUG",
         }
         if gluetun is not None:
             environment["GLUETUN_URL"] = gluetun.url_for_containers
-            environment["GLUETUN_API_KEY"] = gluetun.api_key
+            if gluetun.api_key is not None:
+                environment["GLUETUN_API_KEY"] = gluetun.api_key
         if qbittorrent is not None:
             environment["QBITTORRENT_URL"] = qbittorrent.url_for_containers
             environment["QBITTORRENT_PASSWORD"] = qbittorrent.password
