@@ -75,6 +75,38 @@ def test_init_with_invalid_log_level_defaults_to_info(monkeypatch):
     assert isinstance(app._service_client, QBittorrentClient)
 
 
+@pytest.mark.parametrize("name", ["RETRY_INTERVAL", "SUCCESS_INTERVAL"])
+@pytest.mark.parametrize(
+    "value",
+    ["5m", "10s", "", "2.5", "five"],
+    ids=["minutes", "seconds", "empty", "decimal", "word"],
+)
+def test_init_non_numeric_interval_exits(monkeypatch, capsys, name, value):
+    """Borrowing another tool's duration syntax is the obvious mistake to make."""
+    _set_valid_env(monkeypatch)
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(SystemExit) as exc:
+        Application()
+
+    assert exc.value.code == ReturnCodes.INVALID_ENVIRONMENT_VARIABLE
+    # _configure_logging drops the handlers caplog installs, so read stderr.
+    logs = capsys.readouterr().err
+    assert name in logs
+    assert repr(value) in logs
+
+
+def test_init_intervals_are_read_from_the_environment(monkeypatch):
+    _set_valid_env(monkeypatch)
+    monkeypatch.setenv("RETRY_INTERVAL", "42")
+    monkeypatch.setenv("SUCCESS_INTERVAL", "4242")
+
+    app = Application()
+
+    assert app._retry_interval == 42
+    assert app._success_interval == 4242
+
+
 def test_init_missing_required_env_exits(monkeypatch):
     _set_valid_env(monkeypatch)
     monkeypatch.delenv("GLUETUN_URL")
