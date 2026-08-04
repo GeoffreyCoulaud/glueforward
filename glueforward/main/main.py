@@ -48,7 +48,9 @@ class Application:
         try:
             return int(value)
         except ValueError:
-            logging.critical("Environment variable %s an integer, got %r", name, value)
+            logging.critical(
+                "Environment variable %s must be an integer, got %r", name, value
+            )
             sys.exit(ReturnCodes.INVALID_ENVIRONMENT_VARIABLE)
 
     def _create_service_client(self, service_type: str) -> ServiceClient:

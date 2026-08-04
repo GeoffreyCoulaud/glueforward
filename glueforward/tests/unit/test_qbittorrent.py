@@ -34,14 +34,15 @@ SET_PREFS_PATH = "/api/v2/app/setPreferences"
     [
         (QBittorrentUnreachable, True),
         (QBittorrentServerError, True),
-        (QBittorrentBanned, True),
         (QBittorrentAuthenticationNeeded, True),
         (QBittorrentInvalidCredentials, False),
         (QBittorrentUnexpectedResponse, False),
+        (QBittorrentBanned, False),
     ],
 )
 def test_retry_policy(error, is_retryable):
-    """Retrying a rejected password only gets the caller banned."""
+    """Retrying a rejected password only gets the caller banned, and a ban
+    lasts web_ui_ban_duration whatever we do, so both are worth stopping for."""
     assert issubclass(error, RetryableError) is is_retryable
 
 

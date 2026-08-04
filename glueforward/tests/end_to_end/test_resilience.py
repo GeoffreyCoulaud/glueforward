@@ -12,13 +12,19 @@ No VPN tunnel is needed, so these run without any secret.
 
 import time
 
-from .conftest import get_container_logs, get_is_running, poll_until
+from .conftest import (
+    get_container_logs,
+    get_is_running,
+    poll_until,
+    wait_for_exit_code,
+)
 
 FIRST_PORT = 51413
 SECOND_PORT = 6881
 
 # Generous enough that a container waiting it out is unambiguously stuck.
 STOP_TIMEOUT = 20
+UNRETRYABLE_EXCEPTION_IN_LIFECYCLE = 3
 
 
 def test_a_missing_forwarded_port_is_waited_out(
@@ -40,6 +46,23 @@ def test_a_missing_forwarded_port_is_waited_out(
     fake_gluetun.port = FIRST_PORT
 
     poll_until(lambda: qbittorrent.get_listen_port() == FIRST_PORT, timeout=60)
+
+
+def test_a_first_port_that_never_comes_stops_the_application(
+    fake_gluetun,
+    qbittorrent,
+    start_glueforward,
+):
+    """Waiting out a tunnel is one thing, waiting on a setting that is off is
+    another, and only the deadline tells them apart."""
+    fake_gluetun.port = 0
+    container = start_glueforward(
+        fake_gluetun, qbittorrent, GLUETUN_PORT_WAIT_DURATION=5
+    )
+
+    exit_code = wait_for_exit_code(container, timeout=60)
+    assert exit_code == UNRETRYABLE_EXCEPTION_IN_LIFECYCLE
+    assert "VPN_PORT_FORWARDING" in get_container_logs(container)
 
 
 def test_sigterm_stops_glueforward_promptly(
