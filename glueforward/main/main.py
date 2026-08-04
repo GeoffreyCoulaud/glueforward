@@ -16,13 +16,16 @@ class ReturnCodes(IntEnum):
     MISSING_ENVIRONMENT_VARIABLE = 1
     UNKNOWN_SERVICE_TYPE = 2
     UNRETRYABLE_EXCEPTION_IN_LIFECYCLE = 3
+    INVALID_ENVIRONMENT_VARIABLE = 4
 
 class Application:
 
     def __init__(self) -> None:
         self._configure_logging()
-        self._retry_interval = int(getenv("RETRY_INTERVAL", str(10)))
-        self._success_interval = int(getenv("SUCCESS_INTERVAL", str(60 * 5)))
+        self._retry_interval = self._seconds_getenv("RETRY_INTERVAL", default=10)
+        self._success_interval = self._seconds_getenv(
+            "SUCCESS_INTERVAL", default=60 * 5
+        )
         self._gluetun = GluetunClient(
             url=self._required_getenv("GLUETUN_URL"),
             api_key=getenv("GLUETUN_API_KEY"),
@@ -37,6 +40,20 @@ class Application:
             logging.critical("Environment variable %s is required", name)
             sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
         return value
+
+    def _seconds_getenv(self, name: str, *, default: int) -> int:
+        """Get a duration in seconds, or exit if it is not a whole number"""
+        if (value := getenv(name)) is None:
+            return default
+        try:
+            return int(value)
+        except ValueError:
+            logging.critical(
+                "Environment variable %s must be a whole number of seconds, got %r",
+                name,
+                value,
+            )
+            sys.exit(ReturnCodes.INVALID_ENVIRONMENT_VARIABLE)
 
     def _create_service_client(self, service_type: str) -> ServiceClient:
         """Create and return the appropriate service client based on SERVICE_TYPE"""
