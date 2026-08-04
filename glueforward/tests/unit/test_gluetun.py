@@ -1,20 +1,30 @@
 """Unit tests for glueforward.gluetun."""
 
-import logging
-
 import httpx
 import pytest
 
 from glueforward.main.errors import RetryableError
 from glueforward.main.gluetun import (
-    MISSING_PORT_ERROR_INTERVAL,
     GluetunAuthFailed,
     GluetunClient,
+    GluetunFailedToForwardPort,
     GluetunNoForwardedPort,
     GluetunServerError,
     GluetunUnexpectedResponse,
     GluetunUnreachable,
 )
+
+DEADLINE = 300.0
+
+
+def _make_client(
+    api_key: None | str = None,
+    wait_for_port_until: float = 0.0,
+) -> GluetunClient:
+    """A client whose deadline for a first port has passed, unless stated."""
+    return GluetunClient(
+        url="http://gluetun", api_key=api_key, wait_for_port_until=wait_for_port_until
+    )
 
 
 @pytest.mark.parametrize(
@@ -25,6 +35,7 @@ from glueforward.main.gluetun import (
         (GluetunNoForwardedPort, True),
         (GluetunAuthFailed, False),
         (GluetunUnexpectedResponse, False),
+        (GluetunFailedToForwardPort, False),
     ],
 )
 def test_retry_policy(error, is_retryable):
@@ -38,7 +49,7 @@ def test_init_sets_api_key_header(mock_httpx):
         return httpx.Response(200, json={"port": 1})
 
     mock_httpx(handler)
-    client = GluetunClient(url="http://gluetun", api_key="secret")
+    client = _make_client(api_key="secret")
     assert client.get_forwarded_port() == 1
 
 
@@ -48,7 +59,7 @@ def test_init_without_api_key_header(mock_httpx):
         return httpx.Response(200, json={"port": 1})
 
     mock_httpx(handler)
-    client = GluetunClient(url="http://gluetun", api_key=None)
+    client = _make_client()
     assert client.get_forwarded_port() == 1
 
 
@@ -57,7 +68,7 @@ def test_get_forwarded_port_success(mock_httpx):
         return httpx.Response(200, json={"port": 50000})
 
     mock_httpx(handler)
-    client = GluetunClient(url="http://gluetun", api_key=None)
+    client = _make_client()
     assert client.get_forwarded_port() == 50000
 
 
@@ -70,79 +81,78 @@ def test_get_forwarded_port_requests_the_control_server_endpoint(mock_httpx):
         return httpx.Response(200, json={"port": 1})
 
     mock_httpx(handler)
-    GluetunClient(url="http://gluetun", api_key=None).get_forwarded_port()
+    _make_client().get_forwarded_port()
 
     assert seen == [("GET", "/v1/portforward")]
 
 
-def test_get_forwarded_port_not_forwarded_yet(mock_httpx):
-    def handler(_: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"port": 0})
+@pytest.fixture(name="clock")
+def clock_fixture(monkeypatch):
+    """A monotonic clock the test moves by hand, starting at 0."""
 
-    mock_httpx(handler)
-    client = GluetunClient(url="http://gluetun", api_key=None)
+    class Clock:
+        now = 0.0
+
+    monkeypatch.setattr("glueforward.main.gluetun.monotonic", lambda: Clock.now)
+    return Clock
+
+
+@pytest.fixture(name="forwarded_port")
+def forwarded_port_fixture(mock_httpx):
+    """What gluetun answers, which a test changes between two calls."""
+
+    class Gluetun:
+        port = 0
+
+    mock_httpx(lambda _: httpx.Response(200, json={"port": Gluetun.port}))
+    return Gluetun
+
+
+def test_a_missing_first_port_is_waited_for(clock, forwarded_port):
+    """Negotiating a tunnel takes a while, and reports 0 all the way through."""
+    forwarded_port.port = 0
+    client = _make_client(wait_for_port_until=DEADLINE)
+
+    for clock.now in (0.0, DEADLINE / 2, DEADLINE - 1):
+        with pytest.raises(GluetunNoForwardedPort):
+            client.get_forwarded_port()
+
+
+def test_a_first_port_that_never_comes_is_given_up_on(clock, forwarded_port):
+    """Waiting forever hides the one thing that would explain it, the setting."""
+    forwarded_port.port = 0
+    client = _make_client(wait_for_port_until=DEADLINE)
+    with pytest.raises(GluetunNoForwardedPort):
+        client.get_forwarded_port()
+
+    clock.now = DEADLINE
+
+    with pytest.raises(GluetunFailedToForwardPort) as error:
+        client.get_forwarded_port()
+    assert "VPN_PORT_FORWARDING" in str(error.value)
+
+
+def test_a_port_lost_after_the_deadline_is_only_a_renegotiation(clock, forwarded_port):
+    """A tunnel that dropped one port will get another, however late it is."""
+    client = _make_client(wait_for_port_until=DEADLINE)
+    forwarded_port.port = 51413
+    assert client.get_forwarded_port() == 51413
+
+    forwarded_port.port = 0
+    clock.now = DEADLINE * 10
+
+    # Fatal here would take the deployment down whenever the tunnel renegotiates.
     with pytest.raises(GluetunNoForwardedPort):
         client.get_forwarded_port()
 
 
-def test_a_port_that_never_comes_is_eventually_warned_about(
-    mock_httpx, monkeypatch, caplog
-):
-    """VPN_PORT_FORWARDING left off is otherwise silent: gluetun reports the
-    same 0 as a tunnel that is still negotiating one."""
-    port = 0
+def test_a_first_port_arriving_late_is_still_accepted(clock, forwarded_port):
+    """The deadline only ends the wait, it does not refuse what comes after."""
+    client = _make_client(wait_for_port_until=DEADLINE)
+    forwarded_port.port = 51413
+    clock.now = DEADLINE * 10
 
-    def handler(_: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"port": port})
-
-    clock = 0.0
-    monkeypatch.setattr("glueforward.main.gluetun.monotonic", lambda: clock)
-    mock_httpx(handler)
-    client = GluetunClient(url="http://gluetun", api_key=None)
-
-    with caplog.at_level(logging.WARNING):
-        for _ in range(3):
-            with pytest.raises(GluetunNoForwardedPort):
-                client.get_forwarded_port()
-        assert not caplog.records, "warned before a tunnel could have negotiated"
-
-        clock = MISSING_PORT_ERROR_INTERVAL + 1
-        with pytest.raises(GluetunNoForwardedPort):
-            client.get_forwarded_port()
-        assert len(caplog.records) == 1
-        assert "VPN_PORT_FORWARDING" in caplog.text
-
-        # Repeats rather than warning once, since the fix is out of our hands.
-        clock += MISSING_PORT_ERROR_INTERVAL + 1
-        with pytest.raises(GluetunNoForwardedPort):
-            client.get_forwarded_port()
-        assert len(caplog.records) == 2
-
-
-def test_a_forwarded_port_clears_the_warning(mock_httpx, monkeypatch, caplog):
-    """A tunnel that took its time is not worth warning about afterwards."""
-    port = 0
-
-    def handler(_: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"port": port})
-
-    clock = 0.0
-    monkeypatch.setattr("glueforward.main.gluetun.monotonic", lambda: clock)
-    mock_httpx(handler)
-    client = GluetunClient(url="http://gluetun", api_key=None)
-
-    with caplog.at_level(logging.WARNING):
-        with pytest.raises(GluetunNoForwardedPort):
-            client.get_forwarded_port()
-        port = 51413
-        assert client.get_forwarded_port() == 51413
-
-        port = 0
-        clock = MISSING_PORT_ERROR_INTERVAL + 1
-        with pytest.raises(GluetunNoForwardedPort):
-            client.get_forwarded_port()
-
-        assert not caplog.records
+    assert client.get_forwarded_port() == 51413
 
 
 @pytest.mark.parametrize(
@@ -155,7 +165,7 @@ def test_get_forwarded_port_unreachable(mock_httpx, exception):
         raise exception("boom")
 
     mock_httpx(handler)
-    client = GluetunClient(url="http://gluetun", api_key=None)
+    client = _make_client()
     with pytest.raises(GluetunUnreachable):
         client.get_forwarded_port()
 
@@ -165,7 +175,7 @@ def test_get_forwarded_port_unauthorized(mock_httpx):
         return httpx.Response(401, text="unauthorized")
 
     mock_httpx(handler)
-    client = GluetunClient(url="http://gluetun", api_key="bad")
+    client = _make_client(api_key="bad")
     with pytest.raises(GluetunAuthFailed):
         client.get_forwarded_port()
 
@@ -178,7 +188,7 @@ def test_get_forwarded_port_server_error(mock_httpx, status_code):
         return httpx.Response(status_code, text="server error")
 
     mock_httpx(handler)
-    client = GluetunClient(url="http://gluetun", api_key=None)
+    client = _make_client()
     with pytest.raises(GluetunServerError):
         client.get_forwarded_port()
 
@@ -202,6 +212,6 @@ def test_get_forwarded_port_unexpected_response(mock_httpx, response):
         return response
 
     mock_httpx(handler)
-    client = GluetunClient(url="http://gluetun", api_key=None)
+    client = _make_client()
     with pytest.raises(GluetunUnexpectedResponse):
         client.get_forwarded_port()

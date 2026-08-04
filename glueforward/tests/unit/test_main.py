@@ -75,7 +75,9 @@ def test_init_with_invalid_log_level_defaults_to_info(monkeypatch):
     assert isinstance(app._service_client, QBittorrentClient)
 
 
-@pytest.mark.parametrize("name", ["RETRY_INTERVAL", "SUCCESS_INTERVAL"])
+@pytest.mark.parametrize(
+    "name", ["RETRY_INTERVAL", "SUCCESS_INTERVAL", "GLUETUN_PORT_WAIT_DURATION"]
+)
 @pytest.mark.parametrize(
     "value",
     ["5m", "10s", "", "2.5", "five"],
@@ -105,6 +107,25 @@ def test_init_intervals_are_read_from_the_environment(monkeypatch):
 
     assert app._retry_interval == 42
     assert app._success_interval == 4242
+
+
+@pytest.mark.parametrize(
+    "environment, expected",
+    [({}, 1000 + 300), ({"GLUETUN_PORT_WAIT_DURATION": "42"}, 1000 + 42)],
+    ids=["default", "from_the_environment"],
+)
+def test_init_gives_gluetun_a_deadline_for_its_first_port(
+    monkeypatch, environment, expected
+):
+    """The deadline is counted from startup, so it has to be stamped here."""
+    _set_valid_env(monkeypatch)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr("glueforward.main.main.monotonic", lambda: 1000.0)
+
+    app = Application()
+
+    assert app._gluetun._wait_for_port_until == expected
 
 
 def test_init_missing_required_env_exits(monkeypatch):
@@ -152,8 +173,8 @@ def test_run_handles_lifecycle_branches(monkeypatch):
         "_loop",
         MagicMock(
             side_effect=[
-                RetryableError(message="immediate", retry_immediately=True),
-                RetryableError(message="delayed"),
+                RetryableError("immediate", retry_immediately=True),
+                RetryableError("delayed"),
                 None,  # success path
                 ValueError("unretryable"),  # unretryable -> shutdown
             ]

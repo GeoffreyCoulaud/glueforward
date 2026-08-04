@@ -74,6 +74,7 @@ class GluetunClient:
 
     def __init__(self, url: str, api_key: None | str, wait_for_port_until: float):
         self._client = httpx.Client(base_url=url)
+        self._has_ever_forwarded_port = False
         self._wait_for_port_until = wait_for_port_until
         if api_key:
             self._client.headers.update({"X-API-Key": api_key})
@@ -106,9 +107,8 @@ class GluetunClient:
         if port == 0:
             # Gluetun returns 0 when no port is forwarded.
             # We need to distinguish a temporary drop from a misconfiguration.
-            if self._has_ever_forwarded_port:
-                raise GluetunNoForwardedPort()
-            if monotonic() >= self._wait_for_port_until:
+            if not self._has_ever_forwarded_port and monotonic() >= self._wait_for_port_until:
                 raise GluetunFailedToForwardPort()
+            raise GluetunNoForwardedPort()
         self._has_ever_forwarded_port = True
         return port
