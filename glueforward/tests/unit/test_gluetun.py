@@ -7,7 +7,7 @@ import pytest
 
 from glueforward.main.errors import RetryableError
 from glueforward.main.gluetun import (
-    MISSING_PORT_WARNING_INTERVAL,
+    MISSING_PORT_ERROR_INTERVAL,
     GluetunAuthFailed,
     GluetunClient,
     GluetunNoForwardedPort,
@@ -106,14 +106,14 @@ def test_a_port_that_never_comes_is_eventually_warned_about(
                 client.get_forwarded_port()
         assert not caplog.records, "warned before a tunnel could have negotiated"
 
-        clock = MISSING_PORT_WARNING_INTERVAL + 1
+        clock = MISSING_PORT_ERROR_INTERVAL + 1
         with pytest.raises(GluetunNoForwardedPort):
             client.get_forwarded_port()
         assert len(caplog.records) == 1
         assert "VPN_PORT_FORWARDING" in caplog.text
 
         # Repeats rather than warning once, since the fix is out of our hands.
-        clock += MISSING_PORT_WARNING_INTERVAL + 1
+        clock += MISSING_PORT_ERROR_INTERVAL + 1
         with pytest.raises(GluetunNoForwardedPort):
             client.get_forwarded_port()
         assert len(caplog.records) == 2
@@ -138,7 +138,7 @@ def test_a_forwarded_port_clears_the_warning(mock_httpx, monkeypatch, caplog):
         assert client.get_forwarded_port() == 51413
 
         port = 0
-        clock = MISSING_PORT_WARNING_INTERVAL + 1
+        clock = MISSING_PORT_ERROR_INTERVAL + 1
         with pytest.raises(GluetunNoForwardedPort):
             client.get_forwarded_port()
 

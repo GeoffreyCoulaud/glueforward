@@ -4,7 +4,7 @@ import signal
 import sys
 from enum import IntEnum
 from os import getenv
-from time import sleep
+from time import monotonic, sleep
 
 from .errors import RetryableError
 from .gluetun import GluetunClient
@@ -22,13 +22,13 @@ class Application:
 
     def __init__(self) -> None:
         self._configure_logging()
-        self._retry_interval = self._seconds_getenv("RETRY_INTERVAL", default=10)
-        self._success_interval = self._seconds_getenv(
-            "SUCCESS_INTERVAL", default=60 * 5
-        )
+        self._retry_interval = self._integer_getenv("RETRY_INTERVAL", default=10)
+        self._success_interval = self._integer_getenv("SUCCESS_INTERVAL", 60 * 5)
         self._gluetun = GluetunClient(
             url=self._required_getenv("GLUETUN_URL"),
             api_key=getenv("GLUETUN_API_KEY"),
+            wait_for_port_until=monotonic()
+            + self._integer_getenv("GLUETUN_PORT_WAIT_DURATION", 300),
         )
         self._service_client = self._create_service_client(
             service_type=self._required_getenv("SERVICE_TYPE")
@@ -41,18 +41,14 @@ class Application:
             sys.exit(ReturnCodes.MISSING_ENVIRONMENT_VARIABLE)
         return value
 
-    def _seconds_getenv(self, name: str, *, default: int) -> int:
+    def _integer_getenv(self, name: str, default: int) -> int:
         """Get a duration in seconds, or exit if it is not a whole number"""
         if (value := getenv(name)) is None:
             return default
         try:
             return int(value)
         except ValueError:
-            logging.critical(
-                "Environment variable %s must be a whole number of seconds, got %r",
-                name,
-                value,
-            )
+            logging.critical("Environment variable %s an integer, got %r", name, value)
             sys.exit(ReturnCodes.INVALID_ENVIRONMENT_VARIABLE)
 
     def _create_service_client(self, service_type: str) -> ServiceClient:
@@ -65,10 +61,7 @@ class Application:
                     "password": self._required_getenv("QBITTORRENT_PASSWORD"),
                 },
             )
-        logging.critical(
-            "Invalid SERVICE_TYPE: %s. Must be 'qbittorrent'",
-            service_type
-        )
+        logging.critical("Invalid SERVICE_TYPE: %s", service_type)
         sys.exit(ReturnCodes.UNKNOWN_SERVICE_TYPE)
 
     @staticmethod
@@ -122,10 +115,7 @@ class Application:
                     logging.info("Retrying in %d seconds", self._retry_interval)
                     sleep(self._retry_interval)
             except Exception as error:  # pylint: disable=broad-exception-caught
-                logging.critical(
-                    "Unretryable error in lifecycle, shutting down",
-                    exc_info=error,
-                )
+                logging.critical("Unretryable error in lifecycle", exc_info=error)
                 sys.exit(ReturnCodes.UNRETRYABLE_EXCEPTION_IN_LIFECYCLE)
             else:
                 sleep(self._success_interval)
