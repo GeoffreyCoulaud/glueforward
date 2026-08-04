@@ -16,6 +16,8 @@ services:
   glueforward:
     image: ghcr.io/geoffreycoulaud/glueforward:latest
     container_name: glueforward
+    # A non-zero exit is a setup mistake to fix, not something to restart into
+    restart: "no"
     environment:
       GLUETUN_URL: "..."
       GLUETUN_API_KEY: "..."
@@ -121,6 +123,20 @@ services:
    See the [gluetun control server documentation](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md#authentication-methods) for details.
 2. Required when SERVICE_TYPE=qbittorrent, which is the only supported service at the moment.
 
+## Exit codes
+
+glueforward retries whatever a retry can fix, and stops otherwise. Its exit code says which.
+
+| Code | Meaning |
+| ---- | ------- |
+| 0 | Stopped on SIGTERM, the signal `docker stop` sends. |
+| 1 | A required environment variable is missing. |
+| 2 | `SERVICE_TYPE` names a service that is not supported. |
+| 3 | An error no retry can fix: credentials gluetun or qBittorrent rejected, a URL that does not point at the expected API, or a first forwarded port that never came. |
+| 4 | An environment variable that has to be a whole number holds something else. |
+
+Any code other than 0 is a mistake in the setup, waiting for whoever runs it. Leave the glueforward container on `restart: "no"` (the default) so it stays stopped, with its last log lines saying why, rather than restarting into the same error and hammering gluetun and your service. Nothing is lost by doing so: unreachable servers, 5xx answers, expired sessions and a port that comes and goes are all retried in place, without the process ever exiting.
+
 ## Migrating from v2
 
 Three things changed for an existing deployment.
@@ -131,7 +147,7 @@ Three things changed for an existing deployment.
 
 **`GLUETUN_API_KEY` is now optional.** Leave it unset when gluetun's control server is set up for unauthenticated access. There is nothing to do if you already set it.
 
-Coming from v1 with slskd? Support for it was removed in v2.0.0, since slskd forwards ports natively as of its v0.24.4. See the [v2.0.0 README](https://github.com/GeoffreyCoulaud/glueforward/blob/v2.0.0/README.md#migrating-from-v1-slskd-users) for that migration.
+Coming from v1 with slskd? Support for it was removed in v2.0.0, since slskd forwards ports natively as of its v0.24.4. Configure it through [slskd's own VPN integration](https://github.com/slskd/slskd/blob/master/docs/config.md#vpn), and drop the glueforward container.
 
 ## Other info
 
