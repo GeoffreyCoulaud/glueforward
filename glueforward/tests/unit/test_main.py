@@ -13,14 +13,8 @@ import httpx
 import pytest
 
 from glueforward.main.application import Application
-from glueforward.main.config import Config, QBittorrentConfig
 from glueforward.main.errors import ReturnCodes
-from glueforward.main.main import (
-    build_port_synchronizer,
-    configure_logging,
-    handle_sigterm,
-    main,
-)
+from glueforward.main.main import configure_logging, handle_sigterm, main
 
 from ..external_contracts import (
     GLUETUN_PORT_FORWARD_PATH,
@@ -28,22 +22,9 @@ from ..external_contracts import (
     QBITTORRENT_LOGIN_PATH,
     QBITTORRENT_SET_PREFERENCES_PATH,
 )
-from .conftest import GLUETUN_API_KEY, QBITTORRENT_PASSWORD
+from .conftest import GLUETUN_API_KEY, QBITTORRENT_PASSWORD, EndOfTest
 
 FORWARDED_PORT = 51413
-
-CONFIG = Config(
-    gluetun_url="http://gluetun",
-    gluetun_api_key=GLUETUN_API_KEY,
-    gluetun_port_wait_duration=300,
-    retry_interval=10,
-    success_interval=300,
-    service=QBittorrentConfig(
-        url="http://qbittorrent",
-        username="user",
-        password=QBITTORRENT_PASSWORD,
-    ),
-)
 
 
 @pytest.fixture(autouse=True)
@@ -67,11 +48,23 @@ def restore_logging():
     root.handlers[:] = handlers
 
 
-def _serve_a_forwarded_port(request: httpx.Request) -> httpx.Response:
-    """Answer both services, so a whole cycle goes through."""
-    if request.url.path == GLUETUN_PORT_FORWARD_PATH:
-        return httpx.Response(200, json={GLUETUN_PORT_KEY: FORWARDED_PORT})
-    return httpx.Response(200, headers={"set-cookie": "SID=abc"})
+def _serve_one_cycle(requested: list[tuple[str, str]]):
+    """Answer both services once, then cut short the endless loop.
+
+    Asking gluetun a second time means the first cycle went all the way
+    through, which is the only outcome these tests are after.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        is_gluetun = request.url.path == GLUETUN_PORT_FORWARD_PATH
+        if requested and is_gluetun:
+            raise EndOfTest()
+        requested.append((request.method, request.url.path))
+        if is_gluetun:
+            return httpx.Response(200, json={GLUETUN_PORT_KEY: FORWARDED_PORT})
+        return httpx.Response(200, headers={"set-cookie": "SID=abc"})
+
+    return handler
 
 
 @pytest.mark.parametrize(
@@ -107,17 +100,15 @@ def test_httpx_is_silenced_unless_debugging(monkeypatch, log_level, httpx_level)
     assert logging.getLogger("httpx").getEffectiveLevel() == levels[httpx_level]
 
 
-def test_the_synchronizer_is_wired_to_the_configured_services(mock_httpx, clock):
+@pytest.mark.usefixtures("valid_environment")
+def test_main_wires_the_application_to_the_configured_services(monkeypatch, mock_httpx):
     """One whole cycle in memory, which is what proves the wiring holds."""
+    monkeypatch.setenv("SUCCESS_INTERVAL", "0")
     requested: list[tuple[str, str]] = []
+    mock_httpx(_serve_one_cycle(requested))
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        requested.append((request.method, request.url.path))
-        return _serve_a_forwarded_port(request)
-
-    mock_httpx(handler)
-
-    build_port_synchronizer(CONFIG, clock).synchronize()
+    with pytest.raises(SystemExit):
+        main()
 
     assert requested == [
         ("GET", GLUETUN_PORT_FORWARD_PATH),
@@ -126,16 +117,21 @@ def test_the_synchronizer_is_wired_to_the_configured_services(mock_httpx, clock)
     ]
 
 
-def test_a_successful_cycle_logs_no_secret(mock_httpx, clock, caplog):
+@pytest.mark.usefixtures("valid_environment")
+def test_a_successful_cycle_logs_no_secret(monkeypatch, mock_httpx, capsys):
     """Logs get pasted into issues, so they must not carry credentials."""
-    caplog.set_level(logging.DEBUG)
-    mock_httpx(_serve_a_forwarded_port)
+    monkeypatch.setenv("SUCCESS_INTERVAL", "0")
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    mock_httpx(_serve_one_cycle([]))
 
-    build_port_synchronizer(CONFIG, clock).synchronize()
+    with pytest.raises(SystemExit):
+        main()
 
-    assert caplog.text, "nothing was captured, so the assertions below prove nothing"
-    assert GLUETUN_API_KEY not in caplog.text
-    assert QBITTORRENT_PASSWORD not in caplog.text
+    # configure_logging drops the handlers caplog installs, so read stderr.
+    logs = capsys.readouterr().err
+    assert logs, "nothing was captured, so the assertions below prove nothing"
+    assert GLUETUN_API_KEY not in logs
+    assert QBITTORRENT_PASSWORD not in logs
 
 
 @pytest.mark.usefixtures("valid_environment")

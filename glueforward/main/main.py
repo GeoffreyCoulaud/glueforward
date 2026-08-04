@@ -10,7 +10,7 @@ from .config import Config, ConfigurationError, get_configuration
 from .errors import ReturnCodes
 from .gluetun import GluetunClient
 from .port_synchronizer import PortSynchronizer
-from .ports import Clock, ServiceClient
+from .ports import ServiceClient
 from .qbittorrent import QBittorrentClient
 
 
@@ -57,29 +57,6 @@ def build_service_client(config: Config) -> ServiceClient:
     )
 
 
-def build_port_synchronizer(config: Config, clock: Clock) -> PortSynchronizer:
-    """Wire the synchronizer to the services its configuration points to."""
-    return PortSynchronizer(
-        forwarder=GluetunClient(
-            url=config.gluetun_url,
-            api_key=config.gluetun_api_key,
-        ),
-        service=build_service_client(config),
-        clock=clock,
-        wait_for_first_port_duration=config.gluetun_port_wait_duration,
-    )
-
-
-def build_application(config: Config, clock: Clock) -> Application:
-    """Wire the application to the lifecycle its configuration asks for."""
-    return Application(
-        synchronizer=build_port_synchronizer(config, clock),
-        clock=clock,
-        retry_interval=config.retry_interval,
-        success_interval=config.success_interval,
-    )
-
-
 def handle_sigterm(*_: object) -> None:
     """Shut down on SIGTERM, the signal a container is stopped with.
 
@@ -95,7 +72,22 @@ def main() -> None:
     signal.signal(signal.SIGTERM, handle_sigterm)
     configure_logging()
     try:
-        build_application(get_configuration(), SystemClock()).run()
+        config = get_configuration()
+        clock = SystemClock()
+        Application(
+            synchronizer=PortSynchronizer(
+                forwarder=GluetunClient(
+                    url=config.gluetun_url,
+                    api_key=config.gluetun_api_key,
+                ),
+                service=build_service_client(config),
+                clock=clock,
+                wait_for_first_port_duration=config.gluetun_port_wait_duration,
+            ),
+            clock=clock,
+            retry_interval=config.retry_interval,
+            success_interval=config.success_interval,
+        ).run()
     except ConfigurationError as error:
         logging.critical("%s", error)
         sys.exit(error.return_code)
