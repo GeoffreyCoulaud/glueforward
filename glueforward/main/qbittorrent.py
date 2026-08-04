@@ -45,7 +45,7 @@ class QBittorrentUnexpectedResponse(Exception):
     def __init__(self, *args: object) -> None:
         super().__init__(
             *args,
-            "Unexpected answer from qBittorrent. ",
+            "Unexpected answer from qBittorrent. "
             "Check that QBITTORRENT_URL points to its WebUI.",
         )
 
