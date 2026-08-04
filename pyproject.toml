@@ -27,6 +27,13 @@ dev = [
     "filelock>=3.32.2",
 ]
 
+[tool.coverage.report]
+exclude_also = [
+    # A branch a type checker proves unreachable, and no test can therefore
+    # reach either. Pyright rejects the call as soon as one becomes possible.
+    'assert_never\(',
+]
+
 [tool.pytest.ini_options]
 testpaths = ["glueforward/tests/unit"]
 addopts = "--cov=glueforward.main --cov-branch --cov-report=term-missing --cov-fail-under=100"

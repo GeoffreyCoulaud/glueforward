@@ -3,6 +3,7 @@ import logging.config as logging_config
 import signal
 import sys
 from os import getenv
+from typing import assert_never
 
 from .application import Application
 from .clock import SystemClock
@@ -53,10 +54,8 @@ def configure_logging() -> None:
 
 def build_service_client(config: Config) -> ServiceClient:
     """Create the client of the one service the configuration names."""
-    # ServiceConfig has a single member, so pyright already proves this match
-    # exhaustive and there is no fall-through for a test to reach.
     match config.service:
-        case QBittorrentConfig() as service:  # pragma: no branch
+        case QBittorrentConfig() as service:
             return QBittorrentClient(
                 url=service.url,
                 credentials={
@@ -64,6 +63,7 @@ def build_service_client(config: Config) -> ServiceClient:
                     "password": service.password,
                 },
             )
+    assert_never(config.service)
 
 
 def handle_sigterm(*_: object) -> None:
