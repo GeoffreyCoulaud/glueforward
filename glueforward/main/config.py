@@ -63,8 +63,8 @@ def _get_integer(name: str, default: int) -> int:
 
 
 def _get_service_config() -> ServiceConfig:
-    """Read the configuration of the one service SERVICE_TYPE names."""
-    service_type = _get_required("SERVICE_TYPE")
+    """Read the configuration of the service SERVICE_TYPE names, qBittorrent by default."""
+    service_type = getenv("SERVICE_TYPE", QBITTORRENT_SERVICE_TYPE)
     if service_type != QBITTORRENT_SERVICE_TYPE:
         raise ConfigurationError(
             ReturnCodes.UNKNOWN_SERVICE_TYPE,

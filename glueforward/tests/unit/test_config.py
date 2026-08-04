@@ -58,7 +58,6 @@ def test_a_missing_gluetun_api_key_is_allowed(monkeypatch):
     "name",
     [
         "GLUETUN_URL",
-        "SERVICE_TYPE",
         "QBITTORRENT_URL",
         "QBITTORRENT_USERNAME",
         "QBITTORRENT_PASSWORD",
@@ -92,6 +91,15 @@ def test_a_non_numeric_interval_is_reported(monkeypatch, name, value):
     assert error.value.return_code == ReturnCodes.INVALID_ENVIRONMENT_VARIABLE
     assert name in str(error.value)
     assert repr(value) in str(error.value)
+
+
+def test_a_missing_service_type_means_qbittorrent(monkeypatch):
+    """The only service supported so far does not have to be asked for."""
+    monkeypatch.delenv("SERVICE_TYPE")
+
+    assert get_configuration().service == QBittorrentConfig(
+        url="http://qbittorrent", username="user", password=QBITTORRENT_PASSWORD
+    )
 
 
 def test_an_unknown_service_type_is_reported(monkeypatch):

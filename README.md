@@ -69,8 +69,8 @@ services:
   <tr>
     <td>SERVICE_TYPE</td>
     <td>Service to configure</td>
-    <td>No</td>
-    <td></td>
+    <td>Yes</td>
+    <td>qbittorrent</td>
   </tr>
   <tr>
     <td>QBITTORRENT_URL</td>
@@ -121,7 +121,7 @@ services:
 
 1. Required unless gluetun is setup for unauthenticated access (non default)  
    See the [gluetun control server documentation](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md#authentication-methods) for details.
-2. Required when SERVICE_TYPE=qbittorrent, which is the only supported service at the moment.
+2. Required when SERVICE_TYPE=qbittorrent, its default value and the only supported service at the moment.
 
 ## Exit codes
 
@@ -135,16 +135,13 @@ services:
 
 Any code other than 0 is a mistake in the setup.
 
- [!IMPORTANT]  
+> [!IMPORTANT]  
 > Leave the glueforward container on `restart: "no"` or `restart: on-failure:3`.  
 > Glueforward is built to tolerate transitive errors. Restarting-looping would hammer gluetun and the service without fixing the issue. Use `docker logs` to diagnose crashes.  
 
 ## Migration : v2 -> v3
 
-Three things changed for an existing deployment.
-
-- **`SERVICE_TYPE` is now required.**  
-  It used to be optional, and to default to `qbittorrent`. A container that does not set it now stops on startup with exit code 1.
+Two things changed for an existing deployment.
 
 - **The wait for a first forwarded port is now bounded.**  
   When gluetun still reports no forwarded port `GLUETUN_PORT_WAIT_DURATION` seconds (300 by default) after startup, glueforward stops instead of retrying forever. This surfaces a VPN that is never going to forward a port, typically running without `VPN_PORT_FORWARDING`, or on a provider or server that does not support it. Raise `GLUETUN_PORT_WAIT_DURATION` if your tunnel legitimately takes longer to negotiate its first port. Once a first port has arrived, later disappearances are retried indefinitely, as before.
