@@ -27,7 +27,7 @@ class QBittorrentInvalidCredentials(Exception):
     def __init__(self, *args: object) -> None:
         super().__init__(
             *args,
-            "Failed to authenticate to qBittorrent. ",
+            "Failed to authenticate to qBittorrent. "
             "Check your credentials, as they may be incorrect.",
         )
 
