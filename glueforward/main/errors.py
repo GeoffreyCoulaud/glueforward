@@ -1,3 +1,15 @@
+from enum import IntEnum
+
+
+class ReturnCodes(IntEnum):
+    """The exit codes glueforward stops on, part of the container's interface."""
+
+    MISSING_ENVIRONMENT_VARIABLE = 1
+    UNKNOWN_SERVICE_TYPE = 2
+    UNRETRYABLE_EXCEPTION_IN_LIFECYCLE = 3
+    INVALID_ENVIRONMENT_VARIABLE = 4
+
+
 class RetryableError(Exception):
     """Exception raised when a retryable error occurs"""
 

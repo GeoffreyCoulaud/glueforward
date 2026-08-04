@@ -5,6 +5,47 @@ from collections.abc import Callable
 import httpx
 import pytest
 
+# Distinctive enough to be searched for in the logs.
+GLUETUN_API_KEY = "gluetun-api-key-3f9a2c"
+QBITTORRENT_PASSWORD = "qbittorrent-password-7d1e04"
+
+# Full, valid environment for a qBittorrent deployment.
+VALID_ENVIRONMENT = {
+    "GLUETUN_URL": "http://gluetun",
+    "GLUETUN_API_KEY": GLUETUN_API_KEY,
+    "SERVICE_TYPE": "qbittorrent",
+    "QBITTORRENT_URL": "http://qbittorrent",
+    "QBITTORRENT_USERNAME": "user",
+    "QBITTORRENT_PASSWORD": QBITTORRENT_PASSWORD,
+}
+
+
+@pytest.fixture
+def valid_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start from an environment a real deployment would work with."""
+    for name, value in VALID_ENVIRONMENT.items():
+        monkeypatch.setenv(name, value)
+
+
+class FakeClock:
+    """A clock the test moves by hand, and which records what it waited on."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.slept: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, duration: float) -> None:
+        self.slept.append(duration)
+        self.now += duration
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return FakeClock()
+
 
 @pytest.fixture
 def mock_httpx(monkeypatch: pytest.MonkeyPatch) -> Callable[[Callable], None]:

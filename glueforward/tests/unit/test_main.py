@@ -1,49 +1,49 @@
-"""Unit tests for glueforward.main."""
+"""Unit tests for glueforward.main.main, the entry point.
 
-# Asserts on Application's internals, which have no public accessor.
-# pylint: disable=protected-access
+What is left here is what only the entry point does: reading the environment,
+configuring logging process-wide, wiring the pieces together, and turning
+whatever stops the application into an exit code.
+"""
 
-import io
 import logging
 import signal
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
 
-from glueforward.main.errors import RetryableError
-from glueforward.main.gluetun import (
-    GluetunAuthFailed,
-    GluetunClient,
-    GluetunNoForwardedPort,
-    GluetunServerError,
-)
-from glueforward.main.main import Application, ReturnCodes, handle_sigterm, main
-from glueforward.main.qbittorrent import (
-    QBittorrentAuthenticationNeeded,
-    QBittorrentClient,
-    QBittorrentInvalidCredentials,
-    QBittorrentUnreachable,
+from glueforward.main.application import Application
+from glueforward.main.config import Config, QBittorrentConfig
+from glueforward.main.errors import ReturnCodes
+from glueforward.main.main import (
+    build_port_synchronizer,
+    configure_logging,
+    handle_sigterm,
+    main,
 )
 
-# Distinctive enough to be searched for in the logs.
-GLUETUN_API_KEY = "gluetun-api-key-3f9a2c"
-QBITTORRENT_PASSWORD = "qbittorrent-password-7d1e04"
+from ..external_contracts import (
+    GLUETUN_PORT_FORWARD_PATH,
+    GLUETUN_PORT_KEY,
+    QBITTORRENT_LOGIN_PATH,
+    QBITTORRENT_SET_PREFERENCES_PATH,
+)
+from .conftest import GLUETUN_API_KEY, QBITTORRENT_PASSWORD
 
-# Full, valid environment for building an Application.
-VALID_ENV = {
-    "GLUETUN_URL": "http://gluetun",
-    "GLUETUN_API_KEY": GLUETUN_API_KEY,
-    "SERVICE_TYPE": "qbittorrent",
-    "QBITTORRENT_URL": "http://qbittorrent",
-    "QBITTORRENT_USERNAME": "user",
-    "QBITTORRENT_PASSWORD": QBITTORRENT_PASSWORD,
-}
+FORWARDED_PORT = 51413
 
-
-def _set_valid_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name, value in VALID_ENV.items():
-        monkeypatch.setenv(name, value)
+CONFIG = Config(
+    gluetun_url="http://gluetun",
+    gluetun_api_key=GLUETUN_API_KEY,
+    gluetun_port_wait_duration=300,
+    retry_interval=10,
+    success_interval=300,
+    service=QBittorrentConfig(
+        url="http://qbittorrent",
+        username="user",
+        password=QBITTORRENT_PASSWORD,
+    ),
+)
 
 
 @pytest.fixture(autouse=True)
@@ -54,192 +54,43 @@ def restore_sigterm_handler():
     signal.signal(signal.SIGTERM, original)
 
 
-def test_init_with_valid_log_level(monkeypatch):
-    _set_valid_env(monkeypatch)
-    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
-
-    app = Application()
-
-    assert isinstance(app._gluetun, GluetunClient)
-    assert isinstance(app._service_client, QBittorrentClient)
-    assert app._retry_interval == 10
-    assert app._success_interval == 300
-
-
-def test_init_with_invalid_log_level_defaults_to_info(monkeypatch):
-    _set_valid_env(monkeypatch)
-    monkeypatch.setenv("LOG_LEVEL", "NOPE")
-
-    app = Application()  # must not raise; LOG_LEVEL falls back to INFO
-
-    assert isinstance(app._service_client, QBittorrentClient)
+@pytest.fixture(autouse=True)
+def restore_logging():
+    """configure_logging reconfigures logging process-wide, tests included."""
+    root = logging.getLogger()
+    httpx_logger = logging.getLogger("httpx")
+    levels = (root.level, httpx_logger.level)
+    handlers = root.handlers[:]
+    yield
+    root.setLevel(levels[0])
+    httpx_logger.setLevel(levels[1])
+    root.handlers[:] = handlers
 
 
-@pytest.mark.parametrize(
-    "name", ["RETRY_INTERVAL", "SUCCESS_INTERVAL", "GLUETUN_PORT_WAIT_DURATION"]
-)
-@pytest.mark.parametrize(
-    "value",
-    ["5m", "10s", "", "2.5", "five"],
-    ids=["minutes", "seconds", "empty", "decimal", "word"],
-)
-def test_init_non_numeric_interval_exits(monkeypatch, capsys, name, value):
-    """Borrowing another tool's duration syntax is the obvious mistake to make."""
-    _set_valid_env(monkeypatch)
-    monkeypatch.setenv(name, value)
-
-    with pytest.raises(SystemExit) as exc:
-        Application()
-
-    assert exc.value.code == ReturnCodes.INVALID_ENVIRONMENT_VARIABLE
-    # _configure_logging drops the handlers caplog installs, so read stderr.
-    logs = capsys.readouterr().err
-    assert name in logs
-    assert repr(value) in logs
-
-
-def test_init_intervals_are_read_from_the_environment(monkeypatch):
-    _set_valid_env(monkeypatch)
-    monkeypatch.setenv("RETRY_INTERVAL", "42")
-    monkeypatch.setenv("SUCCESS_INTERVAL", "4242")
-
-    app = Application()
-
-    assert app._retry_interval == 42
-    assert app._success_interval == 4242
+def _serve_a_forwarded_port(request: httpx.Request) -> httpx.Response:
+    """Answer both services, so a whole cycle goes through."""
+    if request.url.path == GLUETUN_PORT_FORWARD_PATH:
+        return httpx.Response(200, json={GLUETUN_PORT_KEY: FORWARDED_PORT})
+    return httpx.Response(200, headers={"set-cookie": "SID=abc"})
 
 
 @pytest.mark.parametrize(
-    "environment, expected",
-    [({}, 1000 + 300), ({"GLUETUN_PORT_WAIT_DURATION": "42"}, 1000 + 42)],
-    ids=["default", "from_the_environment"],
+    "environment_log_level, expected",
+    [("DEBUG", "DEBUG"), ("NOPE", "INFO"), (None, "INFO")],
+    ids=["valid", "invalid", "unset"],
 )
-def test_init_gives_gluetun_a_deadline_for_its_first_port(
-    monkeypatch, environment, expected
+def test_the_log_level_comes_from_the_environment(
+    monkeypatch, environment_log_level, expected
 ):
-    """The deadline is counted from startup, so it has to be stamped here."""
-    _set_valid_env(monkeypatch)
-    for name, value in environment.items():
-        monkeypatch.setenv(name, value)
-    monkeypatch.setattr("glueforward.main.main.monotonic", lambda: 1000.0)
+    """An unreadable LOG_LEVEL must not be a reason to refuse to start."""
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+    if environment_log_level is not None:
+        monkeypatch.setenv("LOG_LEVEL", environment_log_level)
 
-    app = Application()
+    configure_logging()
 
-    assert app._gluetun._wait_for_port_until == expected
-
-
-def test_init_missing_required_env_exits(monkeypatch):
-    _set_valid_env(monkeypatch)
-    monkeypatch.delenv("GLUETUN_URL")
-
-    with pytest.raises(SystemExit) as exc:
-        Application()
-    assert exc.value.code == ReturnCodes.MISSING_ENVIRONMENT_VARIABLE
-
-
-def test_init_unknown_service_type_exits(monkeypatch):
-    _set_valid_env(monkeypatch)
-    monkeypatch.setenv("SERVICE_TYPE", "transmission")
-
-    with pytest.raises(SystemExit) as exc:
-        Application()
-    assert exc.value.code == ReturnCodes.UNKNOWN_SERVICE_TYPE
-
-
-def test_every_tick_writes_the_port_again(monkeypatch):
-    """Nothing is remembered between ticks: anything may have edited it since."""
-    _set_valid_env(monkeypatch)
-    app = Application()
-    gluetun = MagicMock()
-    service = MagicMock()
-    gluetun.get_forwarded_port.return_value = 4242
-    app._gluetun = gluetun
-    app._service_client = service
-
-    app._loop()
-    app._loop()
-
-    assert service.set_port.call_args_list == [call(4242), call(4242)]
-
-
-def test_run_handles_lifecycle_branches(monkeypatch):
-    _set_valid_env(monkeypatch)
-    app = Application()
-    # Distinct values, so the two intervals cannot be swapped unnoticed.
-    app._retry_interval = 7
-    app._success_interval = 11
-    monkeypatch.setattr(
-        Application,
-        "_loop",
-        MagicMock(
-            side_effect=[
-                RetryableError("immediate", retry_immediately=True),
-                RetryableError("delayed"),
-                None,  # success path
-                ValueError("unretryable"),  # unretryable -> shutdown
-            ]
-        ),
-    )
-    sleep = MagicMock()
-    monkeypatch.setattr("glueforward.main.main.sleep", sleep)
-
-    with pytest.raises(SystemExit) as exc:
-        app.run()
-
-    assert exc.value.code == ReturnCodes.UNRETRYABLE_EXCEPTION_IN_LIFECYCLE
-    # No sleep on immediate retry, then each outcome waits out its own interval.
-    assert sleep.call_args_list == [call(7), call(11)]
-
-
-def _patch_loop(monkeypatch, side_effect: list) -> MagicMock:
-    """Drive run() through the given outcomes, and return the patched loop."""
-    loop = MagicMock(side_effect=side_effect)
-    monkeypatch.setattr(Application, "_loop", loop)
-    monkeypatch.setattr("glueforward.main.main.sleep", MagicMock())
-    return loop
-
-
-@pytest.mark.parametrize(
-    "error",
-    [
-        GluetunServerError,
-        GluetunNoForwardedPort,
-        QBittorrentUnreachable,
-        QBittorrentAuthenticationNeeded,
-    ],
-    ids=["gluetun_outage", "no_forwarded_port", "qbittorrent_down", "session_expired"],
-)
-def test_run_survives_a_service_being_away(monkeypatch, error):
-    """Each of these is routine: tunnels renegotiate, sessions expire, stacks restart."""
-    _set_valid_env(monkeypatch)
-    app = Application()
-    loop = _patch_loop(
-        monkeypatch, [error(), error(), None, ValueError("end of the test")]
-    )
-
-    with pytest.raises(SystemExit):
-        app.run()
-
-    # Two failures, a recovery, and only then the exception ending the test.
-    assert loop.call_count == 4
-
-
-@pytest.mark.parametrize(
-    "error",
-    [GluetunAuthFailed, QBittorrentInvalidCredentials],
-    ids=["bad_api_key", "bad_credentials"],
-)
-def test_run_shuts_down_on_a_misconfiguration_without_retrying(monkeypatch, error):
-    """Retrying cannot fix a wrong secret, and gets us banned by qBittorrent."""
-    _set_valid_env(monkeypatch)
-    app = Application()
-    loop = _patch_loop(monkeypatch, [error()])
-
-    with pytest.raises(SystemExit) as exc:
-        app.run()
-
-    assert exc.value.code == ReturnCodes.UNRETRYABLE_EXCEPTION_IN_LIFECYCLE
-    assert loop.call_count == 1
+    levels = logging.getLevelNamesMapping()
+    assert logging.getLogger().getEffectiveLevel() == levels[expected]
 
 
 @pytest.mark.parametrize(
@@ -248,43 +99,47 @@ def test_run_shuts_down_on_a_misconfiguration_without_retrying(monkeypatch, erro
 )
 def test_httpx_is_silenced_unless_debugging(monkeypatch, log_level, httpx_level):
     """httpx logs a line per request, drowning out everything worth reading."""
-    _set_valid_env(monkeypatch)
     monkeypatch.setenv("LOG_LEVEL", log_level)
 
-    Application()
+    configure_logging()
 
     levels = logging.getLevelNamesMapping()
     assert logging.getLogger("httpx").getEffectiveLevel() == levels[httpx_level]
-    assert logging.getLogger().getEffectiveLevel() == levels[log_level]
 
 
-def test_a_successful_cycle_logs_no_secret(monkeypatch, mock_httpx):
-    """Logs get pasted into issues, so they must not carry credentials."""
+def test_the_synchronizer_is_wired_to_the_configured_services(mock_httpx, clock):
+    """One whole cycle in memory, which is what proves the wiring holds."""
+    requested: list[tuple[str, str]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/v1/portforward":
-            return httpx.Response(200, json={"port": 4242})
-        return httpx.Response(200, headers={"set-cookie": "SID=abc"})
+        requested.append((request.method, request.url.path))
+        return _serve_a_forwarded_port(request)
 
-    _set_valid_env(monkeypatch)
-    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     mock_httpx(handler)
-    app = Application()
-    # dictConfig drops the root handlers caplog installs, so capture our own.
-    logs = io.StringIO()
-    capture = logging.StreamHandler(logs)
-    logging.getLogger().addHandler(capture)
-    try:
-        app._loop()
-    finally:
-        logging.getLogger().removeHandler(capture)
 
-    assert GLUETUN_API_KEY not in logs.getvalue()
-    assert QBITTORRENT_PASSWORD not in logs.getvalue()
+    build_port_synchronizer(CONFIG, clock).synchronize()
+
+    assert requested == [
+        ("GET", GLUETUN_PORT_FORWARD_PATH),
+        ("POST", QBITTORRENT_LOGIN_PATH),
+        ("POST", QBITTORRENT_SET_PREFERENCES_PATH),
+    ]
 
 
-def test_main_runs_application(monkeypatch):
-    _set_valid_env(monkeypatch)
+def test_a_successful_cycle_logs_no_secret(mock_httpx, clock, caplog):
+    """Logs get pasted into issues, so they must not carry credentials."""
+    caplog.set_level(logging.DEBUG)
+    mock_httpx(_serve_a_forwarded_port)
+
+    build_port_synchronizer(CONFIG, clock).synchronize()
+
+    assert caplog.text, "nothing was captured, so the assertions below prove nothing"
+    assert GLUETUN_API_KEY not in caplog.text
+    assert QBITTORRENT_PASSWORD not in caplog.text
+
+
+@pytest.mark.usefixtures("valid_environment")
+def test_main_runs_the_application(monkeypatch):
     run = MagicMock()
     monkeypatch.setattr(Application, "run", run)
 
@@ -293,8 +148,8 @@ def test_main_runs_application(monkeypatch):
     run.assert_called_once()
 
 
+@pytest.mark.usefixtures("valid_environment")
 def test_main_installs_the_sigterm_handler(monkeypatch):
-    _set_valid_env(monkeypatch)
     monkeypatch.setattr(Application, "run", MagicMock())
 
     main()
@@ -303,6 +158,30 @@ def test_main_installs_the_sigterm_handler(monkeypatch):
 
 
 def test_sigterm_exits_without_an_error_code():
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(SystemExit) as exit_attempt:
         handle_sigterm(signal.SIGTERM, None)
-    assert exc.value.code == 0
+
+    assert exit_attempt.value.code == 0
+
+
+@pytest.mark.usefixtures("valid_environment")
+def test_main_exits_on_a_configuration_error(monkeypatch, capsys):
+    """The exit code is what a `docker compose` log leaves an operator with."""
+    monkeypatch.delenv("GLUETUN_URL")
+
+    with pytest.raises(SystemExit) as exit_attempt:
+        main()
+
+    assert exit_attempt.value.code == ReturnCodes.MISSING_ENVIRONMENT_VARIABLE
+    # configure_logging drops the handlers caplog installs, so read stderr.
+    assert "GLUETUN_URL" in capsys.readouterr().err
+
+
+@pytest.mark.usefixtures("valid_environment")
+def test_main_exits_on_an_unretryable_error(monkeypatch):
+    monkeypatch.setattr(Application, "run", MagicMock(side_effect=ValueError("boom")))
+
+    with pytest.raises(SystemExit) as exit_attempt:
+        main()
+
+    assert exit_attempt.value.code == ReturnCodes.UNRETRYABLE_EXCEPTION_IN_LIFECYCLE

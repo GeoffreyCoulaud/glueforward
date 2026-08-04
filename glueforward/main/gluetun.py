@@ -1,10 +1,12 @@
 import logging
-from time import monotonic
 from typing import TypedDict
 
 import httpx
 
 from .errors import RetryableError
+
+# What gluetun's control server answers for as long as no port is forwarded.
+NO_FORWARDED_PORT = 0
 
 
 class GluetunAuthFailed(Exception):
@@ -33,13 +35,6 @@ class GluetunServerError(RetryableError):
         super().__init__(*args, "Internal gluetun server error")
 
 
-class GluetunNoForwardedPort(RetryableError):
-    """Exception raised when gluetun has no port forwarded yet"""
-
-    def __init__(self, *args: object) -> None:
-        super().__init__(*args, "Gluetun has no forwarded port yet")
-
-
 class GluetunUnexpectedResponse(Exception):
     """Exception raised when the answer cannot have come from gluetun"""
 
@@ -51,31 +46,21 @@ class GluetunUnexpectedResponse(Exception):
         )
 
 
-class GluetunFailedToForwardPort(Exception):
-    """Exception raised when Gluetun fails to obtain a port after some time"""
-
-    def __init__(self, *args: object) -> None:
-        super().__init__(
-            *args,
-            "Gluetun still reports no forwarded port. "
-            "Check that VPN_PORT_FORWARDING is on, and that your VPN provider and "
-            "server support port forwarding.",
-        )
-
-
 class _PortForwardedResponseModel(TypedDict):
     port: int
 
 
 class GluetunClient:
-    _client: httpx.Client
-    _has_ever_forwarded_port: bool
-    _wait_for_port_until: float
+    """gluetun's control server, seen through the one endpoint we call.
 
-    def __init__(self, url: str, api_key: None | str, wait_for_port_until: float):
+    Translates HTTP into either a port or an error, and decides nothing:
+    what a missing port means is the caller's to judge.
+    """
+
+    _client: httpx.Client
+
+    def __init__(self, url: str, api_key: None | str):
         self._client = httpx.Client(base_url=url)
-        self._has_ever_forwarded_port = False
-        self._wait_for_port_until = wait_for_port_until
         if api_key:
             self._client.headers.update({"X-API-Key": api_key})
         logging.debug("Gluetun client created with base url %s", url)
@@ -91,7 +76,8 @@ class GluetunClient:
         # Anything else is gluetun answering out of character, or not gluetun.
         return GluetunUnexpectedResponse(status_code, text)
 
-    def get_forwarded_port(self) -> int:
+    def get_forwarded_port(self) -> int | None:
+        """Return the forwarded port, or None while gluetun has none."""
         try:
             response = self._client.get(url="/v1/portforward")
             response.raise_for_status()
@@ -104,11 +90,4 @@ class GluetunClient:
             port = data["port"]
         except (ValueError, KeyError, TypeError) as exception:
             raise GluetunUnexpectedResponse(response.text[:200]) from exception
-        if port == 0:
-            # Gluetun returns 0 when no port is forwarded.
-            # We need to distinguish a temporary drop from a misconfiguration.
-            if not self._has_ever_forwarded_port and monotonic() >= self._wait_for_port_until:
-                raise GluetunFailedToForwardPort()
-            raise GluetunNoForwardedPort()
-        self._has_ever_forwarded_port = True
-        return port
+        return None if port == NO_FORWARDED_PORT else port

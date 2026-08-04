@@ -1,7 +1,7 @@
 """Unit tests for glueforward.qbittorrent.
 
-The status codes these tests script are the ones qBittorrent really returns,
-pinned against a live instance by the end-to-end tests.
+The status codes these tests script come from ``external_contracts``, where
+each one is pinned against a live instance by an end-to-end contract test.
 """
 
 # The authentication state under test has no public accessor.
@@ -24,9 +24,15 @@ from glueforward.main.qbittorrent import (
     QBittorrentUnreachable,
 )
 
+from ..external_contracts import (
+    QBITTORRENT_BANNED_STATUS,
+    QBITTORRENT_EXPIRED_SESSION_STATUS,
+    QBITTORRENT_INVALID_CREDENTIALS_STATUS,
+    QBITTORRENT_LOGIN_PATH as LOGIN_PATH,
+    QBITTORRENT_SET_PREFERENCES_PATH as SET_PREFS_PATH,
+)
+
 CREDENTIALS = {"username": "user", "password": "pass"}
-LOGIN_PATH = "/api/v2/auth/login"
-SET_PREFS_PATH = "/api/v2/app/setPreferences"
 
 
 @pytest.mark.parametrize(
@@ -101,7 +107,7 @@ def test_set_port_sends_the_requests_qbittorrent_expects(mock_httpx):
 
 def test_authenticate_invalid_credentials(mock_httpx):
     def handler(_: httpx.Request) -> httpx.Response:
-        return httpx.Response(401)
+        return httpx.Response(QBITTORRENT_INVALID_CREDENTIALS_STATUS)
 
     mock_httpx(handler)
     client = QBittorrentClient(url="http://qbittorrent", credentials=CREDENTIALS)
@@ -111,7 +117,9 @@ def test_authenticate_invalid_credentials(mock_httpx):
 
 def test_authenticate_banned(mock_httpx):
     def handler(_: httpx.Request) -> httpx.Response:
-        return httpx.Response(403, text="Your IP address has been banned")
+        return httpx.Response(
+            QBITTORRENT_BANNED_STATUS, text="Your IP address has been banned"
+        )
 
     mock_httpx(handler)
     client = QBittorrentClient(url="http://qbittorrent", credentials=CREDENTIALS)
@@ -163,7 +171,7 @@ def test_set_port_session_expired(mock_httpx):
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == LOGIN_PATH:
             return _login_ok(request)
-        return httpx.Response(403)
+        return httpx.Response(QBITTORRENT_EXPIRED_SESSION_STATUS)
 
     mock_httpx(handler)
     client = QBittorrentClient(url="http://qbittorrent", credentials=CREDENTIALS)
