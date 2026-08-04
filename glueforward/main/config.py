@@ -25,6 +25,10 @@ class QBittorrentConfig:
     password: str
 
 
+# What SERVICE_TYPE picked, widened as more services become supported.
+type ServiceConfig = QBittorrentConfig
+
+
 @dataclass(frozen=True)
 class Config:
     gluetun_url: str
@@ -32,7 +36,7 @@ class Config:
     gluetun_port_wait_duration: int
     retry_interval: int
     success_interval: int
-    service: QBittorrentConfig
+    service: ServiceConfig
 
 
 def _get_required(name: str) -> str:
@@ -58,7 +62,7 @@ def _get_integer(name: str, default: int) -> int:
         ) from error
 
 
-def _get_service_config() -> QBittorrentConfig:
+def _get_service_config() -> ServiceConfig:
     """Read the configuration of the one service SERVICE_TYPE names."""
     service_type = _get_required("SERVICE_TYPE")
     if service_type != QBITTORRENT_SERVICE_TYPE:

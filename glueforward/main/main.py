@@ -6,7 +6,12 @@ from os import getenv
 
 from .application import Application
 from .clock import SystemClock
-from .config import Config, ConfigurationError, get_configuration
+from .config import (
+    Config,
+    ConfigurationError,
+    QBittorrentConfig,
+    get_configuration,
+)
 from .errors import ReturnCodes
 from .gluetun import GluetunClient
 from .port_synchronizer import PortSynchronizer
@@ -48,13 +53,17 @@ def configure_logging() -> None:
 
 def build_service_client(config: Config) -> ServiceClient:
     """Create the client of the one service the configuration names."""
-    return QBittorrentClient(
-        url=config.service.url,
-        credentials={
-            "username": config.service.username,
-            "password": config.service.password,
-        },
-    )
+    # ServiceConfig has a single member, so pyright already proves this match
+    # exhaustive and there is no fall-through for a test to reach.
+    match config.service:
+        case QBittorrentConfig() as service:  # pragma: no branch
+            return QBittorrentClient(
+                url=service.url,
+                credentials={
+                    "username": service.username,
+                    "password": service.password,
+                },
+            )
 
 
 def handle_sigterm(*_: object) -> None:
