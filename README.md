@@ -59,6 +59,12 @@ services:
     <td></td>
   </tr>
   <tr>
+    <td>GLUETUN_PORT_WAIT_DURATION</td>
+    <td>Maximum time to wait in seconds for the first forwarded port</td>
+    <td>Yes</td>
+    <td>300</td>
+  </tr>
+  <tr>
     <td>SERVICE_TYPE</td>
     <td>Service to configure</td>
     <td>No</td>

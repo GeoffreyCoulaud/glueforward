@@ -11,14 +11,14 @@ class QBittorrentServerError(RetryableError):
     """Exception raised when qbittorrent returns a 5xx error"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__(*args, message="Internal qBittorrent server error")
+        super().__init__(*args, "Internal qBittorrent server error")
 
 
 class QBittorrentUnreachable(RetryableError):
     """Exception raised when qbittorrent is unreachable"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__(*args, message="Failed to reach qBittorrent")
+        super().__init__(*args, "Failed to reach qBittorrent")
 
 
 class QBittorrentInvalidCredentials(Exception):
@@ -27,19 +27,16 @@ class QBittorrentInvalidCredentials(Exception):
     def __init__(self, *args: object) -> None:
         super().__init__(
             *args,
-            "Failed to authenticate to qBittorrent.",
+            "Failed to authenticate to qBittorrent. ",
             "Check your credentials, as they may be incorrect.",
         )
 
 
-class QBittorrentBanned(RetryableError):
+class QBittorrentBanned(Exception):
     """Exception raised when qbittorrent has banned us after failed logins"""
 
     def __init__(self, *args: object) -> None:
-        super().__init__(
-            *args,
-            message="Banned by qBittorrent after too many failed authentications",
-        )
+        super().__init__(*args, "Banned by qBittorrent after too many auth failures")
 
 
 class QBittorrentUnexpectedResponse(Exception):
@@ -48,7 +45,7 @@ class QBittorrentUnexpectedResponse(Exception):
     def __init__(self, *args: object) -> None:
         super().__init__(
             *args,
-            "Unexpected answer from qBittorrent.",
+            "Unexpected answer from qBittorrent. ",
             "Check that QBITTORRENT_URL points to its WebUI.",
         )
 
@@ -59,7 +56,7 @@ class QBittorrentAuthenticationNeeded(RetryableError):
     def __init__(self, *args: object) -> None:
         super().__init__(
             *args,
-            message="qBittorrent needs authentication",
+            "qBittorrent needs authentication",
             retry_immediately=True,  # Reauthenticating is immediate
         )
 
@@ -90,12 +87,11 @@ class QBittorrentClient(ServiceClient):
         except httpx.HTTPStatusError as exception:
             status_code = exception.response.status_code
             if status_code == 401:
-                raise QBittorrentInvalidCredentials from exception
+                raise QBittorrentInvalidCredentials() from exception
             if status_code == 403:
-                # Banned for web_ui_ban_duration seconds, so worth waiting out.
                 raise QBittorrentBanned(exception.response.text) from exception
             if status_code >= 500:
-                raise QBittorrentServerError from exception
+                raise QBittorrentServerError() from exception
             raise QBittorrentUnexpectedResponse(status_code) from exception
         self._client.cookies.update(response.cookies)
         logging.debug("qBittorrent client authenticated")
@@ -122,8 +118,8 @@ class QBittorrentClient(ServiceClient):
                 # Authenticated earlier, so this is an expired session: renew it.
                 logging.warning("qBittorrent session expired")
                 self._reset_authentication()
-                raise QBittorrentAuthenticationNeeded from exception
+                raise QBittorrentAuthenticationNeeded() from exception
             if status_code >= 500:
-                raise QBittorrentServerError from exception
+                raise QBittorrentServerError() from exception
             raise QBittorrentUnexpectedResponse(status_code) from exception
         logging.info("Successfully set qBittorrent port")
