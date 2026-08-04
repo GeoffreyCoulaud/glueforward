@@ -12,7 +12,10 @@ No VPN tunnel is needed, so these run without any secret.
 
 import time
 
+from glueforward.main.errors import ReturnCodes
+
 from .conftest import (
+    GLUEFORWARD_SUCCESS_INTERVAL,
     get_container_logs,
     get_is_running,
     poll_until,
@@ -20,11 +23,19 @@ from .conftest import (
 )
 
 FIRST_PORT = 51413
-SECOND_PORT = 6881
+WRONG_PORT = 1234
 
 # Generous enough that a container waiting it out is unambiguously stuck.
 STOP_TIMEOUT = 20
-UNRETRYABLE_EXCEPTION_IN_LIFECYCLE = 3
+
+# Far below the success interval, so a session expires between two updates.
+SHORT_SESSION_TIMEOUT = 1
+
+# Long enough for a spinning loop to stand out, short enough not to drag.
+OBSERVED_TICKS = 3
+
+# Loose on purpose: a healthy tick costs two calls, a spin costs thousands.
+MAX_REQUESTS_PER_TICK = 4
 
 
 def test_a_missing_forwarded_port_is_waited_out(
@@ -61,7 +72,8 @@ def test_a_first_port_that_never_comes_stops_the_application(
     )
 
     exit_code = wait_for_exit_code(container, timeout=60)
-    assert exit_code == UNRETRYABLE_EXCEPTION_IN_LIFECYCLE
+
+    assert exit_code == ReturnCodes.UNRETRYABLE_EXCEPTION_IN_LIFECYCLE
     assert "VPN_PORT_FORWARDING" in get_container_logs(container)
 
 
@@ -90,7 +102,7 @@ def test_sigterm_stops_glueforward_promptly(
     assert "Received SIGTERM" in get_container_logs(container)
 
 
-def test_expired_qbittorrent_session_is_renewed(
+def test_an_expired_qbittorrent_session_is_renewed(
     fake_gluetun,
     qbittorrent,
     start_glueforward,
@@ -101,16 +113,34 @@ def test_expired_qbittorrent_session_is_renewed(
     an edge case, and glueforward has to reauthenticate and carry on.
     """
     fake_gluetun.port = FIRST_PORT
-    # Far below SUCCESS_INTERVAL, so the session expires between two updates.
-    qbittorrent.set_preferences(web_ui_session_timeout=1)
-    container = start_glueforward(fake_gluetun, qbittorrent)
+    qbittorrent.set_preferences(web_ui_session_timeout=SHORT_SESSION_TIMEOUT)
+    start_glueforward(fake_gluetun, qbittorrent)
+    poll_until(lambda: qbittorrent.get_listen_port() == FIRST_PORT, timeout=60)
+
+    # By the next tick the session has expired, whatever glueforward finds to do.
+    qbittorrent.set_preferences(listen_port=WRONG_PORT)
+
+    poll_until(lambda: qbittorrent.get_listen_port() == FIRST_PORT, timeout=60)
+
+
+def test_renewing_a_session_does_not_hammer_the_services(
+    fake_gluetun,
+    qbittorrent,
+    start_glueforward,
+):
+    """Reauthentication is the one error retried without waiting at all.
+
+    An immediate retry that never succeeded would spin, hammering both
+    services, so the request count has to stay in the order of the tick count.
+    """
+    fake_gluetun.port = FIRST_PORT
+    qbittorrent.set_preferences(web_ui_session_timeout=SHORT_SESSION_TIMEOUT)
+    start_glueforward(fake_gluetun, qbittorrent)
     poll_until(lambda: qbittorrent.get_listen_port() == FIRST_PORT, timeout=60)
 
     requests_before = fake_gluetun.request_count
-    fake_gluetun.port = SECOND_PORT
+    time.sleep(GLUEFORWARD_SUCCESS_INTERVAL * OBSERVED_TICKS)
 
-    poll_until(lambda: qbittorrent.get_listen_port() == SECOND_PORT, timeout=60)
-    assert get_is_running(container)
-    # An immediate retry that never succeeds would hammer both services with no
-    # pause at all, so the update count has to stay in the same order as the ticks.
-    assert fake_gluetun.request_count - requests_before < 60
+    requests = fake_gluetun.request_count - requests_before
+    allowed = OBSERVED_TICKS * MAX_REQUESTS_PER_TICK
+    assert requests <= allowed, f"{requests} requests where at most {allowed} were due"

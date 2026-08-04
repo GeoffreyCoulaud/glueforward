@@ -25,14 +25,30 @@ def test_a_new_forwarded_port_is_propagated(
     as the deployment runs, which is the whole reason the loop exists.
     """
     fake_gluetun.port = FIRST_PORT
-    container = start_glueforward(fake_gluetun, qbittorrent)
+    start_glueforward(fake_gluetun, qbittorrent)
     poll_until(lambda: qbittorrent.get_listen_port() == FIRST_PORT, timeout=60)
 
     fake_gluetun.port = SECOND_PORT
 
     poll_until(lambda: qbittorrent.get_listen_port() == SECOND_PORT, timeout=60)
-    # Free to check here, and the only place httpx's own logging is covered.
+
+
+def test_no_secret_is_ever_logged(
+    fake_gluetun,
+    qbittorrent,
+    start_glueforward,
+):
+    """Logs get pasted into issues, so they must not carry credentials.
+
+    The only place httpx's own logging is covered, which is why the container
+    runs at DEBUG here as everywhere else in these tests.
+    """
+    fake_gluetun.port = FIRST_PORT
+    container = start_glueforward(fake_gluetun, qbittorrent)
+    poll_until(lambda: qbittorrent.get_listen_port() == FIRST_PORT, timeout=60)
+
     logs = get_container_logs(container)
+
     assert qbittorrent.password not in logs, "qBittorrent password leaked to the logs"
     assert fake_gluetun.api_key not in logs, "gluetun API key leaked to the logs"
 
