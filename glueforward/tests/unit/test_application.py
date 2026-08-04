@@ -14,13 +14,11 @@ from glueforward.main.qbittorrent import (
     QBittorrentUnreachable,
 )
 
+from .conftest import EndOfTest
+
 # Distinct values, so the two intervals cannot be swapped unnoticed.
 RETRY_INTERVAL = 7
 SUCCESS_INTERVAL = 11
-
-
-class EndOfTest(Exception):
-    """Stands in for an unretryable error, and ends run()'s infinite loop."""
 
 
 def _make_application(clock, outcomes: list) -> tuple[Application, MagicMock]:

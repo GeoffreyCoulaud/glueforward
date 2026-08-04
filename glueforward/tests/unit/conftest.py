@@ -27,6 +27,10 @@ def valid_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(name, value)
 
 
+class EndOfTest(Exception):
+    """Stands in for an unretryable error, and ends run()'s endless loop."""
+
+
 class FakeClock:
     """A clock the test moves by hand, and which records what it waited on."""
 
