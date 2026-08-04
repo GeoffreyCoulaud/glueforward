@@ -121,6 +121,18 @@ services:
    See the [gluetun control server documentation](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md#authentication-methods) for details.
 2. Required when SERVICE_TYPE=qbittorrent, which is the only supported service at the moment.
 
+## Migrating from v2
+
+Three things changed for an existing deployment.
+
+**`SERVICE_TYPE` is now required.** It used to be optional, and to default to `qbittorrent`. A container that does not set it now stops on startup with exit code 1.
+
+**The wait for a first forwarded port is now bounded.** When gluetun still reports no forwarded port `GLUETUN_PORT_WAIT_DURATION` seconds (300 by default) after startup, glueforward stops with exit code 3 instead of retrying forever. This surfaces a VPN that is never going to forward a port, typically one running without `VPN_PORT_FORWARDING`, or on a provider or server that does not support it. Raise `GLUETUN_PORT_WAIT_DURATION` if your tunnel legitimately takes longer to negotiate its first port. Once a first port has arrived, later disappearances are retried indefinitely, as before.
+
+**`GLUETUN_API_KEY` is now optional.** Leave it unset when gluetun's control server is set up for unauthenticated access. There is nothing to do if you already set it.
+
+Coming from v1 with slskd? Support for it was removed in v2.0.0, since slskd forwards ports natively as of its v0.24.4. See the [v2.0.0 README](https://github.com/GeoffreyCoulaud/glueforward/blob/v2.0.0/README.md#migrating-from-v1-slskd-users) for that migration.
+
 ## Other info
 
 - Ensure that gluetun and your service are reachable from glueforward.
