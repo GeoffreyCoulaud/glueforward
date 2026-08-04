@@ -82,8 +82,8 @@ def test_get_forwarded_port_not_forwarded_yet(mock_httpx):
 
 @pytest.mark.parametrize(
     "exception",
-    [httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout],
-    ids=["connect_error", "read_timeout", "connect_timeout"],
+    [httpx.ConnectError, httpx.ReadError, httpx.ReadTimeout, httpx.ConnectTimeout],
+    ids=["connect_error", "read_error", "read_timeout", "connect_timeout"],
 )
 def test_get_forwarded_port_unreachable(mock_httpx, exception):
     def handler(_: httpx.Request) -> httpx.Response:

@@ -54,7 +54,7 @@ class GluetunClient:
         try:
             response = self._client.get(url="/v1/portforward")
             response.raise_for_status()
-        except (httpx.ConnectError, httpx.TimeoutException) as exception:
+        except (httpx.NetworkError, httpx.TimeoutException) as exception:
             raise GluetunUnreachable(self._client.base_url) from exception
         except httpx.HTTPStatusError as exception:
             if exception.response.status_code == 401:
