@@ -9,6 +9,7 @@ from glueforward.main.gluetun import (
     GluetunClient,
     GluetunNoForwardedPort,
     GluetunServerError,
+    GluetunUnexpectedResponse,
     GluetunUnreachable,
 )
 
@@ -20,6 +21,7 @@ from glueforward.main.gluetun import (
         (GluetunServerError, True),
         (GluetunNoForwardedPort, True),
         (GluetunAuthFailed, False),
+        (GluetunUnexpectedResponse, False),
     ],
 )
 def test_retry_policy(error, is_retryable):
@@ -105,11 +107,38 @@ def test_get_forwarded_port_unauthorized(mock_httpx):
         client.get_forwarded_port()
 
 
-def test_get_forwarded_port_server_error(mock_httpx):
+@pytest.mark.parametrize("status_code", [500, 502, 503])
+def test_get_forwarded_port_server_error(mock_httpx, status_code):
+    """A 5xx is gluetun having a bad moment, so it is worth waiting out."""
+
     def handler(_: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, text="server error")
+        return httpx.Response(status_code, text="server error")
 
     mock_httpx(handler)
     client = GluetunClient(url="http://gluetun", api_key=None)
     with pytest.raises(GluetunServerError):
+        client.get_forwarded_port()
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(404, text="Not Found"),
+        httpx.Response(403, text="Forbidden"),
+        httpx.Response(302, headers={"location": "/login"}),
+        httpx.Response(200, text="<html>a login page</html>"),
+        httpx.Response(200, json={"ports": [51413]}),
+        httpx.Response(200, json=[51413]),
+    ],
+    ids=["not_found", "forbidden", "redirect", "html", "no_port_key", "not_an_object"],
+)
+def test_get_forwarded_port_unexpected_response(mock_httpx, response):
+    """A wrong GLUETUN_URL answers like this, and no retry will fix it."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return response
+
+    mock_httpx(handler)
+    client = GluetunClient(url="http://gluetun", api_key=None)
+    with pytest.raises(GluetunUnexpectedResponse):
         client.get_forwarded_port()

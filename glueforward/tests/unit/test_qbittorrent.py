@@ -20,6 +20,7 @@ from glueforward.main.qbittorrent import (
     QBittorrentClient,
     QBittorrentInvalidCredentials,
     QBittorrentServerError,
+    QBittorrentUnexpectedResponse,
     QBittorrentUnreachable,
 )
 
@@ -36,6 +37,7 @@ SET_PREFS_PATH = "/api/v2/app/setPreferences"
         (QBittorrentBanned, True),
         (QBittorrentAuthenticationNeeded, True),
         (QBittorrentInvalidCredentials, False),
+        (QBittorrentUnexpectedResponse, False),
     ],
 )
 def test_retry_policy(error, is_retryable):
@@ -127,6 +129,21 @@ def test_authenticate_server_error(mock_httpx):
 
 
 @pytest.mark.parametrize(
+    "status_code", [404, 400, 302], ids=["not_found", "bad_request", "redirect"]
+)
+def test_authenticate_unexpected_response(mock_httpx, status_code):
+    """A wrong QBITTORRENT_URL answers like this, and no retry will fix it."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code, text="nothing to do with qBittorrent")
+
+    mock_httpx(handler)
+    client = QBittorrentClient(url="http://qbittorrent", credentials=CREDENTIALS)
+    with pytest.raises(QBittorrentUnexpectedResponse):
+        client.set_port(11111)
+
+
+@pytest.mark.parametrize(
     "exception",
     [httpx.ConnectError, httpx.ReadError, httpx.ReadTimeout, httpx.ConnectTimeout],
     ids=["connect_error", "read_error", "read_timeout", "connect_timeout"],
@@ -155,7 +172,9 @@ def test_set_port_session_expired(mock_httpx):
     assert client._get_is_authenticated() is False
 
 
-def test_set_port_other_http_error_reraised(mock_httpx):
+def test_set_port_server_error(mock_httpx):
+    """Authenticating already waits out a 5xx, and so should writing the port."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == LOGIN_PATH:
             return _login_ok(request)
@@ -163,7 +182,21 @@ def test_set_port_other_http_error_reraised(mock_httpx):
 
     mock_httpx(handler)
     client = QBittorrentClient(url="http://qbittorrent", credentials=CREDENTIALS)
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(QBittorrentServerError):
+        client.set_port(11111)
+
+
+def test_set_port_unexpected_response(mock_httpx):
+    """Authentication went through, so a 404 here is the wrong URL entirely."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == LOGIN_PATH:
+            return _login_ok(request)
+        return httpx.Response(404)
+
+    mock_httpx(handler)
+    client = QBittorrentClient(url="http://qbittorrent", credentials=CREDENTIALS)
+    with pytest.raises(QBittorrentUnexpectedResponse):
         client.set_port(11111)
 
 
