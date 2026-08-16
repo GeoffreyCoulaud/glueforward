@@ -17,7 +17,7 @@ glueforward = "glueforward.main.main:main"
 dev = [
     "pytest>=9",
     "pytest-cov>=7",
-    "pylint>=4",
+    "pylint>=4.0.7",
     "pyright>=1.1",
     "testcontainers>=4.15.0",
     # Imported directly by the end-to-end conftest, so declared rather than
